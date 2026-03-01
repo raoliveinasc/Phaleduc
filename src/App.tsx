@@ -1608,26 +1608,153 @@ const PARENT_STATS = [
   { subject: 'Cultura', A: 95, fullMark: 100 },
 ];
 
-const AlunosPaisPage = () => {
-  const [view, setView] = useState<'entry' | 'child' | 'parent'>('entry');
-  const [selectedChild, setSelectedChild] = useState<typeof CHILDREN_PROFILES[0] | null>(null);
-  const [pinModalOpen, setPinModalOpen] = useState(false);
+// --- Interfaces do Banco de Dados (Supabase/PostgreSQL) ---
+interface FamilyAccount {
+  id: string;
+  email: string;
+  parent_pin: string; // PIN de 4 dígitos para o Modo Família
+}
+
+interface ChildProfile {
+  id: string;
+  family_id: string;
+  name: string;
+  age: number;
+  proficiency_level: 'N0' | 'N1' | 'N2' | 'N3' | 'N4';
+  avatar_url: string;
+}
+
+// --- Componentes Modulares do Portal ---
+
+const LoginView = ({ onLogin }: { onLogin: (data: any) => void }) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)] bg-gray-50"
+    >
+      <div className="max-w-md w-full bg-white rounded-[40px] p-12 shadow-2xl shadow-secondary/5 border border-gray-100">
+        <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
+          <Users className="w-10 h-10" />
+        </div>
+        <h2 className="text-3xl font-black text-secondary text-center mb-2 tracking-tighter">Portal da Família</h2>
+        <p className="text-secondary/50 text-center mb-10 font-medium">Acesse sua conta para gerenciar os perfis dos seus filhos.</p>
+        
+        <form onSubmit={(e) => { e.preventDefault(); onLogin({ email, password }); }} className="space-y-6">
+          <div className="space-y-2">
+            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">E-mail</label>
+            <input 
+              type="email" 
+              required
+              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+              placeholder="exemplo@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Senha</label>
+            <input 
+              type="password" 
+              required
+              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <button 
+            type="submit"
+            className="w-full py-5 bg-secondary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-secondary/20"
+          >
+            Entrar no Portal
+          </button>
+        </form>
+        
+        <div className="mt-8 pt-8 border-t border-gray-100 text-center">
+          <p className="text-xs text-secondary/40 font-medium">
+            Novo por aqui? <button className="text-primary font-black hover:underline">Criar conta familiar</button>
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const ProfileSelectionView = ({ 
+  profiles, 
+  onSelectProfile, 
+  onParentAccess, 
+  onLogout 
+}: { 
+  profiles: any[], 
+  onSelectProfile: (p: any) => void, 
+  onParentAccess: () => void,
+  onLogout: () => void
+}) => (
+  <motion.div 
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0, scale: 0.95 }}
+    className="bg-brand-green flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)]"
+  >
+    <h1 className="text-4xl md:text-6xl font-black text-secondary mb-12 text-center tracking-tighter leading-none">Quem está aprendendo hoje?</h1>
+    
+    <div className="flex flex-wrap justify-center gap-12 mb-16">
+      {profiles.map((profile) => (
+        <button 
+          key={profile.id}
+          onClick={() => onSelectProfile(profile)}
+          className="group flex flex-col items-center gap-4 transition-transform hover:scale-110"
+        >
+          <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white border-4 border-transparent group-hover:border-primary flex items-center justify-center text-6xl md:text-7xl shadow-2xl transition-all overflow-hidden relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            {profile.avatar}
+          </div>
+          <span className="text-2xl font-black text-secondary group-hover:text-primary transition-colors tracking-tight">{profile.name}</span>
+        </button>
+      ))}
+      
+      <button 
+        onClick={onParentAccess}
+        className="group flex flex-col items-center gap-4 transition-transform hover:scale-110"
+      >
+        <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white/50 border-4 border-dashed border-secondary/20 group-hover:border-secondary/40 flex items-center justify-center text-secondary/40 transition-all">
+          <Lock className="w-12 h-12" />
+        </div>
+        <span className="text-2xl font-black text-secondary/40 group-hover:text-secondary/60 transition-colors tracking-tight">Modo Família</span>
+      </button>
+    </div>
+
+    <button 
+      onClick={onLogout}
+      className="text-secondary/30 font-black tracking-widest uppercase text-xs hover:text-secondary/60 transition-colors"
+    >
+      Trocar de Conta • Sair
+    </button>
+  </motion.div>
+);
+
+const PinVerificationModal = ({ 
+  isOpen, 
+  onClose, 
+  onSuccess 
+}: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  onSuccess: () => void 
+}) => {
   const [pin, setPin] = useState("");
 
-  const handleChildSelect = (child: typeof CHILDREN_PROFILES[0]) => {
-    setSelectedChild(child);
-    setView('child');
-  };
-
-  const handleParentAccess = () => {
-    setPinModalOpen(true);
-  };
-
-  const handlePinSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Em produção: Comparar com family.parent_pin vindo do banco (Supabase)
     if (pin === "1234") {
-      setView('parent');
-      setPinModalOpen(false);
+      onSuccess();
       setPin("");
     } else {
       alert("PIN Incorreto! Tente 1234");
@@ -1636,47 +1763,103 @@ const AlunosPaisPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white font-display overflow-hidden">
-      <AnimatePresence mode="wait">
-        {view === 'entry' && (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] bg-secondary/95 backdrop-blur-sm flex items-center justify-center p-4"
+        >
           <motion.div 
-            key="entry"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed inset-0 z-50 bg-brand-green flex flex-col items-center justify-center p-8"
+            initial={{ scale: 0.9, y: 20 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.9, y: 20 }}
+            className="bg-white rounded-[40px] p-12 max-w-md w-full text-center shadow-2xl"
           >
-            <img src={LOGO_URL} alt="Phaleduc" className="h-16 mb-16" referrerPolicy="no-referrer" />
-            <h1 className="text-4xl md:text-6xl font-black text-secondary mb-12 text-center tracking-tighter leading-none">Quem está aprendendo hoje?</h1>
-            
-            <div className="flex flex-wrap justify-center gap-12 mb-16">
-              {CHILDREN_PROFILES.map((child) => (
-                <button 
-                  key={child.id}
-                  onClick={() => handleChildSelect(child)}
-                  className="group flex flex-col items-center gap-4 transition-transform hover:scale-110"
-                >
-                  <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white border-4 border-transparent group-hover:border-primary flex items-center justify-center text-6xl md:text-7xl shadow-2xl transition-all overflow-hidden relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                    {child.avatar}
-                  </div>
-                  <span className="text-2xl font-black text-secondary group-hover:text-primary transition-colors tracking-tight">{child.name}</span>
-                </button>
-              ))}
-              
-              <button 
-                onClick={handleParentAccess}
-                className="group flex flex-col items-center gap-4 transition-transform hover:scale-110"
-              >
-                <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white/50 border-4 border-dashed border-secondary/20 group-hover:border-secondary/40 flex items-center justify-center text-secondary/40 transition-all">
-                  <Lock className="w-12 h-12" />
-                </div>
-                <span className="text-2xl font-black text-secondary/40 group-hover:text-secondary/60 transition-colors tracking-tight">Modo Família</span>
-              </button>
+            <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
+              <Lock className="w-10 h-10" />
             </div>
-
-            <p className="text-secondary/30 font-black tracking-widest uppercase text-xs">Mundo Phaleduc • 2026</p>
+            <h3 className="text-3xl font-black text-secondary mb-4 tracking-tighter">Área dos Pais</h3>
+            <p className="text-secondary/50 font-medium mb-8">Digite o PIN de 4 dígitos para continuar.</p>
+            
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <input 
+                type="password" 
+                maxLength={4}
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="••••"
+                className="w-full text-center text-5xl font-black tracking-[1em] py-6 bg-gray-50 rounded-3xl border-2 border-transparent focus:border-primary focus:outline-none transition-all placeholder:text-gray-200"
+                autoFocus
+              />
+              
+              <div className="flex gap-4">
+                <button 
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 py-4 bg-gray-100 text-secondary font-black rounded-2xl uppercase tracking-widest text-sm hover:bg-gray-200 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="flex-1 py-4 bg-primary text-white font-black rounded-2xl uppercase tracking-widest text-sm hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
+                >
+                  Entrar
+                </button>
+              </div>
+            </form>
+            <p className="mt-8 text-[10px] font-black text-secondary/20 uppercase tracking-widest">Dica: O PIN padrão é 1234</p>
           </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+const AlunosPaisPage = () => {
+  /**
+   * GERENCIAMENTO DE SESSÃO (NextAuth Strategy):
+   * 1. 'familySession': Gerencia se os pais estão logados na conta principal.
+   * 2. 'activeProfile': Gerencia qual criança está usando o app no momento.
+   * Em produção, 'familySession' seria um cookie HttpOnly do NextAuth.
+   * 'activeProfile' pode ser um cookie simples ou estado no Context/Zustand.
+   */
+  const [view, setView] = useState<'login' | 'profiles' | 'child' | 'parent'>('login');
+  const [selectedChild, setSelectedChild] = useState<typeof CHILDREN_PROFILES[0] | null>(null);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
+
+  const handleLogin = (data: any) => {
+    // Simulação: Em Next.js usaríamos signIn('credentials', data)
+    console.log("Autenticando família:", data.email);
+    setView('profiles');
+  };
+
+  const handleProfileSelect = (profile: any) => {
+    setSelectedChild(profile);
+    setView('child');
+  };
+
+  const handleParentSuccess = () => {
+    setPinModalOpen(false);
+    setView('parent');
+  };
+
+  return (
+    <div className="min-h-[calc(100vh-112px)] bg-white font-display overflow-hidden relative">
+      <AnimatePresence mode="wait">
+        {view === 'login' && (
+          <LoginView onLogin={handleLogin} />
+        )}
+
+        {view === 'profiles' && (
+          <ProfileSelectionView 
+            profiles={CHILDREN_PROFILES}
+            onSelectProfile={handleProfileSelect}
+            onParentAccess={() => setPinModalOpen(true)}
+            onLogout={() => setView('login')}
+          />
         )}
 
         {view === 'child' && selectedChild && (
@@ -1685,7 +1868,7 @@ const AlunosPaisPage = () => {
             initial={{ opacity: 0, x: 100 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -100 }}
-            className="min-h-screen flex flex-col lg:flex-row"
+            className="min-h-[calc(100vh-112px)] flex flex-col lg:flex-row"
           >
             {/* Sidebar - Backpack */}
             <aside className="w-full lg:w-80 bg-brand-green/30 border-r border-secondary/5 p-8 flex flex-col gap-8 order-2 lg:order-1">
@@ -1713,10 +1896,10 @@ const AlunosPaisPage = () => {
 
               <div className="mt-auto pt-8 border-t border-secondary/10">
                 <button 
-                  onClick={() => setView('entry')}
+                  onClick={() => setView('profiles')}
                   className="w-full py-4 bg-secondary text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-xl"
                 >
-                  <ArrowRight className="w-4 h-4 rotate-180" /> Sair do Mundo
+                  <ArrowRight className="w-4 h-4 rotate-180" /> Trocar Perfil
                 </button>
               </div>
             </aside>
@@ -1805,7 +1988,7 @@ const AlunosPaisPage = () => {
             initial={{ opacity: 0, scale: 1.05 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen bg-white p-8 md:p-12 lg:p-20"
+            className="min-h-[calc(100vh-112px)] bg-white p-8 md:p-12 lg:p-20"
           >
             <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-16">
               <div>
@@ -1815,7 +1998,7 @@ const AlunosPaisPage = () => {
                 <h2 className="text-4xl md:text-5xl font-black text-secondary tracking-tighter">Painel de Acompanhamento</h2>
               </div>
               <button 
-                onClick={() => setView('entry')}
+                onClick={() => setView('profiles')}
                 className="px-8 py-4 bg-secondary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-secondary/90 transition-all flex items-center gap-2"
               >
                 Sair do Painel
@@ -1894,59 +2077,12 @@ const AlunosPaisPage = () => {
         )}
       </AnimatePresence>
 
-      {/* PIN Modal */}
-      <AnimatePresence>
-        {pinModalOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-secondary/95 backdrop-blur-sm flex items-center justify-center p-4"
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-white rounded-[40px] p-12 max-w-md w-full text-center shadow-2xl"
-            >
-              <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
-                <Lock className="w-10 h-10" />
-              </div>
-              <h3 className="text-3xl font-black text-secondary mb-4 tracking-tighter">Área dos Pais</h3>
-              <p className="text-secondary/50 font-medium mb-8">Digite o PIN de 4 dígitos para continuar.</p>
-              
-              <form onSubmit={handlePinSubmit} className="space-y-8">
-                <input 
-                  type="password" 
-                  maxLength={4}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="••••"
-                  className="w-full text-center text-5xl font-black tracking-[1em] py-6 bg-gray-50 rounded-3xl border-2 border-transparent focus:border-primary focus:outline-none transition-all placeholder:text-gray-200"
-                  autoFocus
-                />
-                
-                <div className="flex gap-4">
-                  <button 
-                    type="button"
-                    onClick={() => { setPinModalOpen(false); setPin(""); }}
-                    className="flex-1 py-4 bg-gray-100 text-secondary font-black rounded-2xl uppercase tracking-widest text-sm hover:bg-gray-200 transition-all"
-                  >
-                    Cancelar
-                  </button>
-                  <button 
-                    type="submit"
-                    className="flex-1 py-4 bg-primary text-white font-black rounded-2xl uppercase tracking-widest text-sm hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
-                  >
-                    Entrar
-                  </button>
-                </div>
-              </form>
-              <p className="mt-8 text-[10px] font-black text-secondary/20 uppercase tracking-widest">Dica: O PIN padrão é 1234</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Trava de Segurança (PIN) */}
+      <PinVerificationModal 
+        isOpen={pinModalOpen} 
+        onClose={() => setPinModalOpen(false)} 
+        onSuccess={handleParentSuccess} 
+      />
     </div>
   );
 };
