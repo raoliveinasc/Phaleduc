@@ -152,62 +152,63 @@ const Navbar = () => {
   return (
     <div className="bg-brand-green pb-6 sticky top-0 z-50">
       <nav className="max-w-7xl mx-auto px-4">
-        <div className="bg-white rounded-[32px] px-4 h-20 flex items-center shadow-lg overflow-x-auto no-scrollbar">
+        <div className="bg-white rounded-[32px] px-6 h-20 flex items-center shadow-lg overflow-x-auto no-scrollbar">
           {/* Logo - Left */}
-          <div className="flex-shrink-0 mr-4">
-            <Link to="/" className="flex-shrink-0">
+          <div className="flex-1 flex justify-start">
+            <Link to="/" className="flex items-center">
               <img src={LOGO_URL} alt="Phaleduc" className="h-10 w-auto object-contain" referrerPolicy="no-referrer" />
             </Link>
           </div>
           
-          {/* Navigation - Right */}
-          <div className="flex-1 flex justify-end items-center gap-1 sm:gap-2">
+          {/* Navigation - Center */}
+          <div className="flex-shrink-0 flex justify-center items-center gap-2 md:gap-4 px-4">
             {navItems.map((item) => (
               <Link 
                 key={item.name} 
                 to={item.path}
                 className={cn(
-                  "flex flex-col items-center justify-center p-1.5 rounded-xl transition-all min-w-[52px] sm:min-w-[64px]",
+                  "flex flex-col items-center justify-center p-2 rounded-xl transition-all min-w-[58px] md:min-w-[72px] group",
                   location.pathname === item.path 
                     ? "bg-primary/10 text-primary" 
                     : "text-secondary hover:bg-secondary/5"
                 )}
                 title={item.name}
               >
-                <item.icon className="w-4 h-4 mb-0.5" />
-                <span className="text-[9px] font-bold uppercase tracking-tighter">{item.name}</span>
+                <item.icon className="w-4 h-4 mb-1 group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] font-black uppercase tracking-tighter">{item.name}</span>
               </Link>
             ))}
+          </div>
+
+          {/* Action Buttons - Right */}
+          <div className="flex-1 flex justify-end items-center gap-3">
+            <div className="h-8 w-[1px] bg-gray-100 mx-2 hidden lg:block" />
             
-            <div className="h-8 w-[1px] bg-gray-100 mx-1 hidden md:block" />
+            <Link 
+              to="/alunos-pais" 
+              className={cn(
+                "flex flex-col items-center justify-center p-2 rounded-xl transition-all min-w-[80px] md:min-w-[90px] shadow-sm group",
+                location.pathname === '/alunos-pais'
+                  ? "bg-primary text-white"
+                  : "bg-primary/10 text-primary hover:bg-primary/20"
+              )}
+            >
+              <Users className="w-4 h-4 mb-1 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase tracking-tighter">Aluno & Pais</span>
+            </Link>
 
-            <div className="flex gap-1.5 ml-1 sm:ml-2">
-              <Link 
-                to="/alunos-pais" 
-                className={cn(
-                  "flex flex-col items-center justify-center p-1.5 rounded-xl transition-all min-w-[70px] sm:min-w-[80px] shadow-sm",
-                  location.pathname === '/alunos-pais'
-                    ? "bg-primary text-white"
-                    : "bg-primary/10 text-primary hover:bg-primary/20"
-                )}
-              >
-                <Users className="w-4 h-4 mb-0.5" />
-                <span className="text-[9px] font-black uppercase tracking-tighter">Aluno & Pais</span>
-              </Link>
-
-              <Link 
-                to="/tutores" 
-                className={cn(
-                  "flex flex-col items-center justify-center p-1.5 rounded-xl transition-all min-w-[60px] sm:min-w-[70px] shadow-sm",
-                  location.pathname === '/tutores'
-                    ? "bg-secondary text-white"
-                    : "bg-secondary/10 text-secondary hover:bg-secondary/20"
-                )}
-              >
-                <GraduationCap className="w-4 h-4 mb-0.5" />
-                <span className="text-[9px] font-black uppercase tracking-tighter">Tutores</span>
-              </Link>
-            </div>
+            <Link 
+              to="/tutores" 
+              className={cn(
+                "flex flex-col items-center justify-center p-2 rounded-xl transition-all min-w-[70px] md:min-w-[80px] shadow-sm group",
+                location.pathname === '/tutores'
+                  ? "bg-secondary text-white"
+                  : "bg-secondary/10 text-secondary hover:bg-secondary/20"
+              )}
+            >
+              <GraduationCap className="w-4 h-4 mb-1 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase tracking-tighter">Tutores</span>
+            </Link>
           </div>
         </div>
       </nav>
@@ -1042,43 +1043,50 @@ const LojaPage = () => {
     >
       {/* Store Header */}
       <header className="bg-white border-b border-gray-100 sticky top-[112px] z-40">
-        <div className="max-w-7xl mx-auto px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          {/* Logo (Already in Navbar, but adding a store-specific branding if needed) */}
-          <div className="flex items-center gap-3">
-            <ShoppingBag className="w-8 h-8 text-primary" />
-            <span className="text-2xl font-black text-secondary tracking-tighter uppercase">Loja Phaleduc</span>
+        <div className="max-w-7xl mx-auto px-8 py-6 flex flex-col lg:flex-row items-center gap-8">
+          {/* Logo - Left */}
+          <div className="flex-shrink-0 flex items-center gap-3 min-w-[200px]">
+            <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+              <ShoppingBag className="w-6 h-6" />
+            </div>
+            <span className="text-2xl font-black text-secondary tracking-tighter uppercase leading-none">
+              Loja<br/><span className="text-primary">Phaleduc</span>
+            </span>
           </div>
 
-          {/* Search Bar */}
-          <div className="flex-1 max-w-xl w-full relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary/30 w-5 h-5" />
+          {/* Search Bar - Center */}
+          <div className="flex-1 max-w-2xl w-full relative">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/30 w-5 h-5" />
             <input 
               type="text"
               placeholder="O que seu brasileirinho precisa hoje?"
-              className="w-full pl-12 pr-4 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary/20 focus:bg-white focus:outline-none transition-all font-medium text-secondary"
+              className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-[24px] border-2 border-transparent focus:border-primary/20 focus:bg-white focus:outline-none transition-all font-bold text-secondary shadow-inner"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
 
-          {/* Currency & Cart */}
-          <div className="flex items-center gap-6">
-            <select 
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              className="bg-gray-50 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest text-secondary focus:outline-none cursor-pointer"
-            >
-              <option value="USD">USD ($)</option>
-              <option value="EUR">EUR (€)</option>
-              <option value="BRL">BRL (R$)</option>
-            </select>
+          {/* Currency & Cart - Right */}
+          <div className="flex-shrink-0 flex items-center gap-4 min-w-[200px] justify-end">
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] font-black text-secondary/30 uppercase tracking-widest mb-1">Moeda</span>
+              <select 
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="bg-gray-50 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest text-secondary focus:outline-none cursor-pointer border border-gray-100 hover:bg-white transition-colors"
+              >
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="BRL">BRL (R$)</option>
+              </select>
+            </div>
 
             <button className="relative group">
-              <div className="flex items-center gap-3 bg-secondary text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:brightness-110 transition-all shadow-xl shadow-secondary/20">
+              <div className="flex items-center gap-3 bg-secondary text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-secondary/20">
                 <Backpack className="w-5 h-5" />
-                <span className="hidden md:inline">Minha Mochila</span>
+                <span className="hidden xl:inline">Minha Mochila</span>
                 {cartCount > 0 && (
-                  <span className="absolute -top-2 -right-2 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-[10px] border-2 border-white animate-bounce">
+                  <span className="absolute -top-2 -right-2 w-7 h-7 bg-primary text-white rounded-full flex items-center justify-center text-[11px] font-black border-4 border-white animate-bounce shadow-lg">
                     {cartCount}
                   </span>
                 )}
