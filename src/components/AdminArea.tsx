@@ -207,13 +207,15 @@ const ManageResource = ({
   table, 
   columns, 
   fields,
-  icon: Icon
+  icon: Icon,
+  customSelect = '*'
 }: { 
   title: string, 
   table: string, 
-  columns: { key: string, label: string, render?: (val: any) => React.ReactNode }[],
-  fields: { key: string, label: string, type: string, options?: string[] }[],
-  icon: any
+  columns: { key: string, label: string, render?: (val: any, item?: any) => React.ReactNode }[],
+  fields: { key: string, label: string, type: string, options?: (string | { value: string, label: string })[] }[],
+  icon: any,
+  customSelect?: string
 }) => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -230,7 +232,7 @@ const ManageResource = ({
   async function fetchData() {
     setLoading(true);
     try {
-      const { data: result, error } = await supabase.from(table).select('*').order('created_at', { ascending: false });
+      const { data: result, error } = await supabase.from(table).select(customSelect).order('created_at', { ascending: false });
       if (error) throw error;
       setData(result || []);
     } catch (err) {
@@ -401,7 +403,7 @@ const ManageResource = ({
                   <tr key={item.id} className="group hover:bg-gray-50/50 transition-colors">
                     {columns.map(col => (
                       <td key={col.key} className="px-8 py-6 border-b border-gray-50">
-                        {col.render ? col.render(item[col.key]) : (
+                        {col.render ? col.render(item[col.key], item) : (
                           <span className="font-bold text-secondary">{item[col.key] || '-'}</span>
                         )}
                       </td>
@@ -483,9 +485,11 @@ const ManageResource = ({
                           onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
                         >
                           <option value="">Selecione...</option>
-                          {field.options?.map(opt => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
+                          {field.options?.map(opt => {
+                            const value = typeof opt === 'string' ? opt : opt.value;
+                            const label = typeof opt === 'string' ? opt : opt.label;
+                            return <option key={value} value={value}>{label}</option>;
+                          })}
                         </select>
                       ) : (
                         <input 
@@ -535,24 +539,40 @@ const ManageResource = ({
 export const AdminArea = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [parents, setParents] = useState<{ value: string, label: string }[]>([]);
+  const [tutors, setTutors] = useState<{ value: string, label: string }[]>([]);
 
   useEffect(() => {
-    try {
-      // Check if supabase is configured by accessing it (proxy will trigger check)
-      // This is just to catch the error early if credentials are missing
-      const url = import.meta.env.VITE_SUPABASE_URL;
-      const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      if (!url || !key) {
-        throw new Error('Credenciais do Supabase não encontradas. Verifique as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
+    async function init() {
+      try {
+        const url = import.meta.env.VITE_SUPABASE_URL;
+        const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        
+        if (!url || !key) {
+          throw new Error('Credenciais do Supabase não encontradas. Verifique as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
+        }
+        
+        setIsAuthenticated(true);
+
+        // Fetch parents and tutors for the Alunos form
+        const [paisRes, tutoresRes] = await Promise.all([
+          supabase.from('pais').select('id, nome').order('nome'),
+          supabase.from('tutores').select('id, nome').order('nome')
+        ]);
+
+        if (paisRes.data) {
+          setParents(paisRes.data.map(p => ({ value: p.id, label: p.nome })));
+        }
+        if (tutoresRes.data) {
+          setTutors(tutoresRes.data.map(t => ({ value: t.id, label: t.nome })));
+        }
+      } catch (err: any) {
+        console.error('AdminArea config error:', err);
+        setConfigError(err.message);
+        setIsAuthenticated(false);
       }
-      
-      setIsAuthenticated(true);
-    } catch (err: any) {
-      console.error('AdminArea config error:', err);
-      setConfigError(err.message);
-      setIsAuthenticated(false);
     }
+    init();
   }, []);
 
   if (configError) {
@@ -638,20 +658,22 @@ export const AdminArea = () => {
                 title="Alunos" 
                 table="alunos" 
                 icon={Backpack}
+                customSelect="*, pais(nome), tutores(nome)"
                 columns={[
                   { key: 'nome', label: 'Nome' },
                   { key: 'data_nascimento', label: 'Nascimento', render: (val) => val ? new Date(val).toLocaleDateString() : '-' },
                   { key: 'nivel', label: 'Nível' },
+                  { key: 'parent_id', label: 'Responsável', render: (_, item) => item.pais?.nome || '-' },
+                  { key: 'tutor_id', label: 'Tutor', render: (_, item) => item.tutores?.nome || '-' },
                   { key: 'status', label: 'Status' },
-                  { key: 'created_at', label: 'Cadastro', render: (val) => new Date(val).toLocaleDateString() }
                 ]}
                 fields={[
                   { key: 'nome', label: 'Nome do Aluno', type: 'text' },
                   { key: 'data_nascimento', label: 'Data de Nascimento', type: 'date' },
                   { key: 'nivel', label: 'Nível/Turma', type: 'select', options: ['Iniciante', 'Intermediário', 'Avançado', 'Nativo'] },
                   { key: 'status', label: 'Status', type: 'select', options: ['ativo', 'inativo'] },
-                  { key: 'parent_id', label: 'ID do Responsável (UUID)', type: 'text' },
-                  { key: 'tutor_id', label: 'ID do Tutor (UUID)', type: 'text' },
+                  { key: 'parent_id', label: 'Responsável', type: 'select', options: parents },
+                  { key: 'tutor_id', label: 'Tutor', type: 'select', options: tutors },
                   { key: 'observacoes', label: 'Observações', type: 'text' }
                 ]}
               />
