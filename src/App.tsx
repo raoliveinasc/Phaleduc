@@ -2297,11 +2297,19 @@ const AlunosPaisPage = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [familyData, setFamilyData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [activeChildId, setActiveChildId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [loginMode, setLoginMode] = useState<'parent' | 'student'>('parent');
+
+  // Set initial active child when profiles are loaded
+  useEffect(() => {
+    if (profiles.length > 0 && !activeChildId) {
+      setActiveChildId(profiles[0].id);
+    }
+  }, [profiles]);
 
   // Verificar sessão ao carregar
   useEffect(() => {
@@ -2858,24 +2866,49 @@ const AlunosPaisPage = () => {
             <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-12">
               {/* Children List with Access Codes */}
               <div className="lg:col-span-3 bg-gray-50 rounded-[40px] p-8 md:p-12">
-                <div className="flex items-center gap-4 mb-8">
-                  <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
-                    <Users className="w-6 h-6" />
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-secondary tracking-tight">Seus Filhos</h3>
+                      <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Clique para ver o acompanhamento individual</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-secondary tracking-tight">Seus Filhos</h3>
-                    <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Códigos de Acesso para Alunos</p>
+                  <div className="bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100 flex items-center gap-2">
+                    <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Total:</span>
+                    <span className="font-black text-secondary">{profiles.length} {profiles.length === 1 ? 'Criança' : 'Crianças'}</span>
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {profiles.map((child) => (
-                    <div key={child.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl">
-                        {child.avatar}
+                    <button 
+                      key={child.id} 
+                      onClick={() => setActiveChildId(child.id)}
+                      className={cn(
+                        "bg-white p-6 rounded-3xl border transition-all flex items-center gap-4 text-left group relative overflow-hidden",
+                        activeChildId === child.id 
+                          ? "border-primary ring-4 ring-primary/10 shadow-lg" 
+                          : "border-gray-100 shadow-sm hover:border-primary/30 hover:shadow-md"
+                      )}
+                    >
+                      {activeChildId === child.id && (
+                        <div className="absolute top-0 right-0 w-12 h-12 bg-primary text-white flex items-center justify-center rounded-bl-2xl">
+                          <CheckCircle2 className="w-5 h-5" />
+                        </div>
+                      )}
+                      
+                      <div className={cn(
+                        "w-16 h-16 rounded-2xl flex items-center justify-center text-3xl transition-transform group-hover:scale-110",
+                        activeChildId === child.id ? "bg-primary/10" : "bg-gray-50"
+                      )}>
+                        {child.avatar || '👶'}
                       </div>
                       <div className="flex-1">
                         <h4 className="font-black text-secondary">{child.name}</h4>
+                        <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">{child.nivel || 'Nível não definido'}</p>
                         <div className="mt-2 flex items-center gap-2">
                           <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Código:</span>
                           <code className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-black text-sm tracking-widest">
@@ -2883,15 +2916,20 @@ const AlunosPaisPage = () => {
                           </code>
                         </div>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
 
               {/* Stats Chart */}
               <div className="lg:col-span-2 bg-gray-50 rounded-[40px] p-8 md:p-12">
-                <div className="flex justify-between items-center mb-12">
-                  <h3 className="text-2xl font-black text-secondary tracking-tight">Desenvolvimento das Dimensões</h3>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-12">
+                  <div>
+                    <h3 className="text-2xl font-black text-secondary tracking-tight">
+                      Desenvolvimento: {profiles.find(c => c.id === activeChildId)?.name || 'Carregando...'}
+                    </h3>
+                    <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Análise de competências linguísticas</p>
+                  </div>
                   <div className="flex gap-4">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-primary rounded-full" />
