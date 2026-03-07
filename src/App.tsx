@@ -1938,9 +1938,11 @@ const ChildRegistrationView = ({
   );
 };
 
-const LoginView = ({ onLogin, onSwitchToRegister }: { onLogin: (data: any) => void, onSwitchToRegister: () => void }) => {
+const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (data: any) => void, onSwitchToRegister: () => void, onStudentLogin: (code: string) => void }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loginMode, setLoginMode] = useState<'parent' | 'student'>('parent');
+  const [studentCode, setStudentCode] = useState("");
 
   return (
     <motion.div 
@@ -1950,48 +1952,101 @@ const LoginView = ({ onLogin, onSwitchToRegister }: { onLogin: (data: any) => vo
       className="flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)] bg-gray-50"
     >
       <div className="max-w-md w-full bg-white rounded-[40px] p-12 shadow-2xl shadow-secondary/5 border border-gray-100">
-        <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
-          <Users className="w-10 h-10" />
-        </div>
-        <h2 className="text-3xl font-black text-secondary text-center mb-2 tracking-tighter">Portal da Família</h2>
-        <p className="text-secondary/50 text-center mb-10 font-medium">Acesse sua conta para gerenciar os perfis dos seus filhos.</p>
-        
-        <form onSubmit={(e) => { e.preventDefault(); onLogin({ email, password }); }} className="space-y-6">
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">E-mail</label>
-            <input 
-              type="email" 
-              required
-              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
-              placeholder="exemplo@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Senha</label>
-            <input 
-              type="password" 
-              required
-              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
+        <div className="flex bg-gray-100 p-2 rounded-2xl mb-8">
           <button 
-            type="submit"
-            className="w-full py-5 bg-secondary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-secondary/20"
+            onClick={() => setLoginMode('parent')}
+            className={cn(
+              "flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all",
+              loginMode === 'parent' ? "bg-white text-secondary shadow-sm" : "text-secondary/40 hover:text-secondary/60"
+            )}
           >
-            Entrar no Portal
+            Pais
           </button>
-        </form>
-        
-        <div className="mt-8 pt-8 border-t border-gray-100 text-center">
-          <p className="text-xs text-secondary/40 font-medium">
-            Novo por aqui? <button onClick={onSwitchToRegister} className="text-primary font-black hover:underline">Criar conta familiar</button>
-          </p>
+          <button 
+            onClick={() => setLoginMode('student')}
+            className={cn(
+              "flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all",
+              loginMode === 'student' ? "bg-white text-primary shadow-sm" : "text-secondary/40 hover:text-secondary/60"
+            )}
+          >
+            Alunos
+          </button>
         </div>
+
+        <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
+          {loginMode === 'parent' ? <Users className="w-10 h-10" /> : <Gamepad2 className="w-10 h-10" />}
+        </div>
+        
+        <h2 className="text-3xl font-black text-secondary text-center mb-2 tracking-tighter">
+          {loginMode === 'parent' ? "Portal da Família" : "Mundo Phaleduc"}
+        </h2>
+        <p className="text-secondary/50 text-center mb-10 font-medium">
+          {loginMode === 'parent' 
+            ? "Acesse sua conta para gerenciar os perfis dos seus filhos." 
+            : "Digite seu código de aluno para começar a aventura!"}
+        </p>
+        
+        {loginMode === 'parent' ? (
+          <form onSubmit={(e) => { e.preventDefault(); onLogin({ email, password }); }} className="space-y-6">
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">E-mail</label>
+              <input 
+                type="email" 
+                required
+                className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+                placeholder="exemplo@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Senha</label>
+              <input 
+                type="password" 
+                required
+                className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <button 
+              type="submit"
+              className="w-full py-5 bg-secondary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-secondary/20"
+            >
+              Entrar no Portal
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={(e) => { e.preventDefault(); onStudentLogin(studentCode); }} className="space-y-6">
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Código do Aluno</label>
+              <input 
+                type="text" 
+                required
+                className="w-full px-6 py-6 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-black text-secondary text-center text-3xl tracking-[0.5em]"
+                placeholder="000000"
+                value={studentCode}
+                onChange={(e) => setStudentCode(e.target.value)}
+              />
+              <p className="text-[10px] text-secondary/30 font-bold text-center mt-2">Peça seu código para seu pai ou mãe.</p>
+            </div>
+            <button 
+              type="submit"
+              className="w-full py-5 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20"
+            >
+              Começar a Jogar!
+            </button>
+          </form>
+        )}
+        
+        {loginMode === 'parent' && (
+          <div className="mt-8 pt-8 border-t border-gray-100 text-center">
+            <p className="text-xs text-secondary/40 font-medium">
+              Novo por aqui? <button onClick={onSwitchToRegister} className="text-primary font-black hover:underline">Criar conta familiar</button>
+            </p>
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -2234,7 +2289,8 @@ const PinVerificationModal = ({
 };
 
 const AlunosPaisPage = () => {
-  const [view, setView] = useState<'login' | 'register' | 'profiles' | 'child' | 'parent' | 'create-password' | 'register-children'>('login');
+  const [view, setView] = useState<'login' | 'register' | 'profiles' | 'child' | 'parent' | 'onboarding'>('login');
+  const [onboardingStep, setOnboardingStep] = useState<'password' | 'pin' | 'children'>('password');
   const [selectedChild, setSelectedChild] = useState<any | null>(null);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -2245,6 +2301,7 @@ const AlunosPaisPage = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [loginMode, setLoginMode] = useState<'parent' | 'student'>('parent');
 
   // Verificar sessão ao carregar
   useEffect(() => {
@@ -2255,9 +2312,17 @@ const AlunosPaisPage = () => {
         const family = await loadFamilyData(session.user.id);
         
         if (family?.senha_temporaria) {
-          setView('create-password');
+          setView('onboarding');
+          setOnboardingStep('password');
         } else {
-          setView('profiles');
+          // Verificar se tem crianças
+          const { data: children } = await supabase.from('alunos').select('id').eq('parent_id', session.user.id);
+          if (!children || children.length === 0) {
+            setView('onboarding');
+            setOnboardingStep('children');
+          } else {
+            setView('profiles');
+          }
         }
       }
       setLoading(false);
@@ -2301,27 +2366,18 @@ const AlunosPaisPage = () => {
                               (family.senha_temporaria && family.senha_temporaria === data.password);
       
       if (isValidPassword) {
-        // Se a senha for válida na tabela, tentamos logar no Auth do Supabase também
-        // (Assumindo que o usuário existe no Auth com o mesmo e-mail)
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: data.email,
-          password: data.password,
-        });
-
-        // Se o login no Auth falhar mas a senha na tabela estiver correta, 
-        // pode ser que o usuário ainda não tenha sido criado no Auth ou a senha seja diferente.
-        // Para simplificar e seguir o fluxo do tutor, vamos considerar o login válido se estiver na tabela.
         setUser({ id: family.id, email: family.email });
         setFamilyData(family);
         await loadFamilyData(family.id);
 
         if (family.senha_temporaria && family.senha_temporaria === data.password) {
-          setView('create-password');
+          setView('onboarding');
+          setOnboardingStep('password');
         } else {
-          // Verificar se tem crianças, se não tiver, forçar cadastro
           const { data: children } = await supabase.from('alunos').select('id').eq('parent_id', family.id);
           if (!children || children.length === 0) {
-            setView('register-children');
+            setView('onboarding');
+            setOnboardingStep('children');
           } else {
             setView('profiles');
           }
@@ -2338,7 +2394,7 @@ const AlunosPaisPage = () => {
     });
 
     if (error) {
-      alert("Erro ao entrar: " + error.message);
+      alert("E-mail ou senha incorretos. Se este é seu primeiro acesso, use a senha temporária enviada pelo administrador.");
       setLoading(false);
       return;
     }
@@ -2347,16 +2403,40 @@ const AlunosPaisPage = () => {
       setUser(authData.user);
       const family = await loadFamilyData(authData.user.id);
       if (family?.senha_temporaria) {
-        setView('create-password');
+        setView('onboarding');
+        setOnboardingStep('password');
       } else {
-        // Verificar se tem crianças
         const { data: children } = await supabase.from('alunos').select('id').eq('parent_id', authData.user.id);
         if (!children || children.length === 0) {
-          setView('register-children');
+          setView('onboarding');
+          setOnboardingStep('children');
         } else {
           setView('profiles');
         }
       }
+    }
+    setLoading(false);
+  };
+
+  const handleStudentQuickLogin = async (code: string) => {
+    if (!code) return;
+    setLoading(true);
+    
+    // Buscar todos os alunos e filtrar pelo prefixo do ID (Código de Acesso)
+    const { data: students, error } = await supabase
+      .from('alunos')
+      .select('*, pais(*)');
+
+    if (students) {
+      const student = students.find(s => s.id.slice(0, 6).toUpperCase() === code.toUpperCase());
+      if (student) {
+        setSelectedChild(student);
+        setView('child');
+      } else {
+        alert("Código de aluno não encontrado. Verifique com seus pais.");
+      }
+    } else {
+      alert("Erro ao buscar alunos.");
     }
     setLoading(false);
   };
@@ -2467,6 +2547,7 @@ const AlunosPaisPage = () => {
           <LoginView 
             onLogin={handleLogin} 
             onSwitchToRegister={() => setView('register')} 
+            onStudentLogin={handleStudentQuickLogin}
           />
         )}
 
@@ -2477,31 +2558,90 @@ const AlunosPaisPage = () => {
           />
         )}
 
-        {view === 'create-password' && (
-          <PasswordCreationView 
-            userId={user?.id}
-            userName={familyData?.nome || "Responsável"}
-            onSuccess={async () => {
-              await loadFamilyData(user.id);
-              // Após criar senha, verificar se tem crianças
-              const { data: children } = await supabase.from('alunos').select('id').eq('parent_id', user.id);
-              if (!children || children.length === 0) {
-                setView('register-children');
-              } else {
-                setView('profiles');
-              }
-            }}
-          />
-        )}
+        {view === 'onboarding' && (
+          <motion.div 
+            key="onboarding"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="bg-gray-50 min-h-[calc(100vh-112px)] py-20 px-8"
+          >
+            <div className="max-w-4xl mx-auto">
+              <div className="flex justify-center gap-4 mb-12">
+                {[
+                  { id: 'password', label: 'Senha', icon: Unlock },
+                  { id: 'pin', label: 'PIN', icon: Lock },
+                  { id: 'children', label: 'Crianças', icon: PlusCircle }
+                ].map((step, idx) => (
+                  <div key={step.id} className="flex items-center gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+                      onboardingStep === step.id ? "bg-primary text-white shadow-lg" : "bg-white text-secondary/20"
+                    )}>
+                      <step.icon className="w-5 h-5" />
+                    </div>
+                    <span className={cn(
+                      "text-[10px] font-black uppercase tracking-widest hidden md:block",
+                      onboardingStep === step.id ? "text-secondary" : "text-secondary/20"
+                    )}>
+                      {step.label}
+                    </span>
+                    {idx < 2 && <div className="w-8 h-[2px] bg-gray-200 mx-2" />}
+                  </div>
+                ))}
+              </div>
 
-        {view === 'register-children' && (
-          <ChildRegistrationView 
-            parentId={user?.id}
-            onSuccess={async () => {
-              await loadFamilyData(user.id);
-              setView('profiles');
-            }}
-          />
+              {onboardingStep === 'password' && (
+                <PasswordCreationView 
+                  userId={user?.id} 
+                  userName={familyData?.nome || "Responsável"} 
+                  onSuccess={() => setOnboardingStep('pin')} 
+                />
+              )}
+
+              {onboardingStep === 'pin' && (
+                <div className="max-w-md mx-auto bg-white rounded-[40px] p-12 shadow-2xl border border-gray-100">
+                  <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
+                    <Lock className="w-10 h-10" />
+                  </div>
+                  <h2 className="text-3xl font-black text-secondary text-center mb-2 tracking-tighter">Definir PIN</h2>
+                  <p className="text-secondary/50 text-center mb-10 font-medium">Crie um PIN de 4 dígitos para acessar o Modo Família.</p>
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    const pin = (e.target as any).pin.value;
+                    if (pin.length !== 4) return alert("O PIN deve ter 4 dígitos.");
+                    setLoading(true);
+                    const { error } = await supabase.from('pais').update({ parent_pin: pin }).eq('id', user.id);
+                    setLoading(false);
+                    if (error) alert("Erro ao salvar PIN.");
+                    else setOnboardingStep('children');
+                  }} className="space-y-8">
+                    <input 
+                      name="pin"
+                      type="password" 
+                      maxLength={4}
+                      required
+                      className="w-full text-center text-5xl font-black tracking-[1em] py-6 bg-gray-50 rounded-3xl border-2 border-transparent focus:border-primary focus:outline-none transition-all placeholder:text-gray-200"
+                      placeholder="••••"
+                    />
+                    <button type="submit" className="w-full py-5 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-primary/20">
+                      Salvar e Continuar
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {onboardingStep === 'children' && (
+                <ChildRegistrationView 
+                  parentId={user?.id} 
+                  onSuccess={async () => {
+                    await loadFamilyData(user.id);
+                    setView('profiles');
+                  }} 
+                />
+              )}
+            </div>
+          </motion.div>
         )}
 
         {view === 'profiles' && (
@@ -2716,6 +2856,38 @@ const AlunosPaisPage = () => {
             </AnimatePresence>
 
             <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-12">
+              {/* Children List with Access Codes */}
+              <div className="lg:col-span-3 bg-gray-50 rounded-[40px] p-8 md:p-12">
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-secondary tracking-tight">Seus Filhos</h3>
+                    <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Códigos de Acesso para Alunos</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {profiles.map((child) => (
+                    <div key={child.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl">
+                        {child.avatar}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-black text-secondary">{child.name}</h4>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Código:</span>
+                          <code className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-black text-sm tracking-widest">
+                            {child.id.slice(0, 6).toUpperCase()}
+                          </code>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Stats Chart */}
               <div className="lg:col-span-2 bg-gray-50 rounded-[40px] p-8 md:p-12">
                 <div className="flex justify-between items-center mb-12">

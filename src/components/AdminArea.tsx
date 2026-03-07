@@ -699,6 +699,11 @@ export const AdminArea = () => {
                 customSelect="*, pais(nome), tutores(nome)"
                 columns={[
                   { key: 'nome', label: 'Nome' },
+                  { key: 'id', label: 'Código de Acesso', render: (val) => (
+                    <span className="font-mono bg-gray-100 px-3 py-1 rounded-lg text-primary font-black">
+                      {val.slice(0, 6).toUpperCase()}
+                    </span>
+                  )},
                   { key: 'data_nascimento', label: 'Nascimento', render: (val) => val ? new Date(val).toLocaleDateString() : '-' },
                   { key: 'nivel', label: 'Nível' },
                   { key: 'parent_id', label: 'Responsável', render: (_, item) => item.pais?.nome || '-' },
