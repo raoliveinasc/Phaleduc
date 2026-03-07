@@ -2388,15 +2388,95 @@ const AlunosPaisPage = () => {
 
 const TutoresPage = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [mustCreatePassword, setMustCreatePassword] = useState(false);
+  const [tutorData, setTutorData] = useState<any>(null);
   const [showRegister, setShowRegister] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email && password) {
-      setIsLoggedIn(true);
+    if (!email || !password) return;
+
+    try {
+      const { data: tutor, error } = await supabase
+        .from('tutores')
+        .select('*')
+        .eq('email', email)
+        .single();
+
+      if (error || !tutor) {
+        alert('Tutor não encontrado ou e-mail incorreto.');
+        return;
+      }
+
+      // Check if tutor is active
+      if (tutor.status !== 'ativo') {
+        alert('Seu cadastro ainda não está ativo. Entre em contato com o administrador.');
+        return;
+      }
+
+      // Validate password
+      // 1. Check permanent password first
+      if (tutor.senha && tutor.senha === password) {
+        setTutorData(tutor);
+        setIsLoggedIn(true);
+        setMustCreatePassword(false);
+      } 
+      // 2. Check temporary password if no permanent password or if it matches
+      else if (tutor.senha_temporaria && tutor.senha_temporaria === password) {
+        setTutorData(tutor);
+        setIsLoggedIn(true);
+        setMustCreatePassword(true); // Force password creation
+      } else {
+        alert('Senha incorreta. Verifique seus dados ou o convite enviado pelo administrador.');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      alert('Erro ao realizar login. Tente novamente mais tarde.');
+    }
+  };
+
+  const handleCreatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      alert('As senhas não coincidem.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      alert('A senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+
+    setIsSavingPassword(true);
+    try {
+      const { error } = await supabase
+        .from('tutores')
+        .update({ 
+          senha: newPassword,
+          senha_temporaria: null // Clear temporary password
+        })
+        .eq('id', tutorData.id);
+
+      if (error) throw error;
+
+      alert(mustCreatePassword ? 'Senha criada com sucesso! Agora você pode acessar o portal.' : 'Senha atualizada com sucesso!');
+      setMustCreatePassword(false);
+      setShowPasswordChange(false);
+      setNewPassword('');
+      setConfirmPassword('');
+      // Update local data
+      setTutorData({ ...tutorData, senha: newPassword, senha_temporaria: null });
+    } catch (err) {
+      console.error('Error saving password:', err);
+      alert('Erro ao salvar nova senha. Tente novamente.');
+    } finally {
+      setIsSavingPassword(false);
     }
   };
 
@@ -2484,6 +2564,60 @@ const TutoresPage = () => {
     );
   }
 
+  if (mustCreatePassword) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        className="min-h-[80vh] flex items-center justify-center bg-gray-50 p-6"
+      >
+        <div className="max-w-md w-full bg-white rounded-[40px] shadow-2xl p-12 space-y-8 border border-gray-100">
+          <div className="text-center space-y-4">
+            <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-6">
+              <Unlock className="w-10 h-10 text-primary" />
+            </div>
+            <h2 className="text-4xl font-black text-secondary">Criar sua Senha</h2>
+            <p className="text-secondary/60 font-medium">Olá, {tutorData?.nome}! Para sua segurança, crie uma senha definitiva para acessar o portal.</p>
+          </div>
+
+          <form onSubmit={handleCreatePassword} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase tracking-widest text-secondary/40 ml-4">Nova Senha</label>
+              <input 
+                type="password" 
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase tracking-widest text-secondary/40 ml-4">Confirmar Senha</label>
+              <input 
+                type="password" 
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
+            </div>
+            <button 
+              type="submit"
+              disabled={isSavingPassword}
+              className="w-full bg-primary text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+            >
+              {isSavingPassword ? 'Salvando...' : 'Definir Senha e Entrar'}
+            </button>
+          </form>
+        </div>
+      </motion.div>
+    );
+  }
+
   const SidebarItem = ({ id, icon: Icon, label }: { id: string, icon: any, label: string }) => (
     <button 
       onClick={() => setActiveTab(id)}
@@ -2541,7 +2675,7 @@ const TutoresPage = () => {
             >
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
-                  <h1 className="text-4xl font-black text-secondary">Olá, Educador(a) Phaleduc! 👋</h1>
+                  <h1 className="text-4xl font-black text-secondary">Olá, {tutorData?.nome || 'Educador(a)'}! 👋</h1>
                   <p className="text-secondary/60 font-medium italic">"Transformando a herança brasileira em futuro através da sua voz."</p>
                 </div>
                 <div className="flex items-center gap-4">
@@ -2550,8 +2684,10 @@ const TutoresPage = () => {
                     <span className="absolute top-2 right-2 w-3 h-3 bg-primary rounded-full border-2 border-white"></span>
                   </button>
                   <div className="flex items-center gap-3 bg-white p-2 pr-6 rounded-2xl shadow-sm border border-gray-100">
-                    <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center text-secondary font-black">E</div>
-                    <span className="font-bold text-secondary text-sm">Educador(a) Phaleduc</span>
+                    <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center text-secondary font-black">
+                      {tutorData?.nome?.[0] || 'E'}
+                    </div>
+                    <span className="font-bold text-secondary text-sm">{tutorData?.nome || 'Educador(a) Phaleduc'}</span>
                   </div>
                 </div>
               </div>
@@ -2850,16 +2986,74 @@ const TutoresPage = () => {
                 </div>
                 <div className="flex-1 text-center md:text-left space-y-6">
                   <div>
-                    <h2 className="text-5xl font-black text-secondary">Tutor Phaleduc</h2>
-                    <p className="text-xl text-secondary/40 font-bold uppercase tracking-widest">Membro desde Jan 2024</p>
+                    <h2 className="text-5xl font-black text-secondary">{tutorData?.nome || 'Tutor Phaleduc'}</h2>
+                    <p className="text-xl text-secondary/40 font-bold uppercase tracking-widest">
+                      {tutorData?.convite_enviado_em ? `Membro desde ${new Date(tutorData.convite_enviado_em).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}` : 'Membro desde Jan 2024'}
+                    </p>
                   </div>
                   <div className="flex flex-wrap justify-center md:justify-start gap-4">
                     <div className="px-6 py-3 bg-primary/10 text-primary rounded-2xl font-black uppercase tracking-widest text-xs">Nível 4</div>
                     <div className="px-6 py-3 bg-secondary/10 text-secondary rounded-2xl font-black uppercase tracking-widest text-xs">1.250 XP</div>
                     <div className="px-6 py-3 bg-yellow-400/10 text-yellow-600 rounded-2xl font-black uppercase tracking-widest text-xs">3 Badges</div>
                   </div>
+                  <div className="pt-4">
+                    <button 
+                      onClick={() => setShowPasswordChange(!showPasswordChange)}
+                      className="flex items-center gap-2 text-xs font-black text-secondary/40 hover:text-primary transition-all uppercase tracking-widest"
+                    >
+                      <Settings className="w-4 h-4" /> Configurações de Segurança
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {showPasswordChange && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white p-12 rounded-[50px] shadow-xl border border-primary/20 space-y-8"
+                >
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-3xl font-black text-secondary">Alterar Senha</h3>
+                    <button onClick={() => setShowPasswordChange(false)} className="text-secondary/40 hover:text-danger"><X className="w-6 h-6" /></button>
+                  </div>
+                  <form onSubmit={handleCreatePassword} className="grid md:grid-cols-2 gap-6 items-end">
+                    <div className="space-y-2">
+                      <label className="text-xs font-black uppercase tracking-widest text-secondary/40 ml-4">Nova Senha</label>
+                      <input 
+                        type="password" 
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                        placeholder="••••••••"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-black uppercase tracking-widest text-secondary/40 ml-4">Confirmar Senha</label>
+                      <input 
+                        type="password" 
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                        placeholder="••••••••"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+                    <div className="md:col-span-2 flex justify-end">
+                      <button 
+                        type="submit"
+                        disabled={isSavingPassword}
+                        className="bg-primary text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                      >
+                        {isSavingPassword ? 'Salvando...' : 'Atualizar Senha'}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              )}
 
               {/* Checklist de Qualidade */}
               <div className="bg-white p-12 rounded-[50px] shadow-xl border border-gray-50 space-y-10">
