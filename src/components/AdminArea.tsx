@@ -256,26 +256,47 @@ const ManageResource = ({
     e.preventDefault();
     setIsSaving(true);
     try {
+      // Clean up data: remove empty strings and handle UUIDs
+      const cleanData = { ...formData };
+      Object.keys(cleanData).forEach(key => {
+        // Remove empty strings so Supabase can use NULL or default values
+        if (cleanData[key] === '') {
+          delete cleanData[key];
+        }
+        // Ensure ID is not sent on insert
+        if (!editingItem && key === 'id') {
+          delete cleanData[key];
+        }
+      });
+
+      let result;
       if (editingItem) {
-        const { error } = await supabase
+        result = await supabase
           .from(table)
-          .update(formData)
+          .update(cleanData)
           .eq('id', editingItem.id);
-        if (error) throw error;
       } else {
-        const { error } = await supabase
+        result = await supabase
           .from(table)
-          .insert([formData]);
-        if (error) throw error;
+          .insert([cleanData]);
       }
+
+      if (result.error) throw result.error;
+
       await fetchData();
       handleCloseModal();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving:', err);
-      alert('Erro ao salvar os dados.');
+      const message = err.message || err.details || err.hint || 'Erro desconhecido';
+      alert(`Erro ao salvar: ${message}\n\nVerifique se todos os campos obrigatórios estão preenchidos corretamente.`);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert('ID copiado para a área de transferência!');
   };
 
   const handleDelete = async (id: string) => {
@@ -350,6 +371,9 @@ const ManageResource = ({
                     {col.label}
                   </th>
                 ))}
+                <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40 border-b border-gray-100">
+                  ID
+                </th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40 border-b border-gray-100 text-right">
                   Ações
                 </th>
@@ -382,6 +406,15 @@ const ManageResource = ({
                         )}
                       </td>
                     ))}
+                    <td className="px-8 py-6 border-b border-gray-50">
+                      <button 
+                        onClick={() => copyToClipboard(item.id)}
+                        className="text-[10px] font-mono bg-gray-100 hover:bg-primary/10 hover:text-primary px-2 py-1 rounded transition-colors"
+                        title="Clique para copiar o ID"
+                      >
+                        {item.id.slice(0, 8)}...
+                      </button>
+                    </td>
                     <td className="px-8 py-6 border-b border-gray-50 text-right">
                       <div className="flex justify-end gap-2">
                         <button 
@@ -525,13 +558,37 @@ export const AdminArea = () => {
   if (configError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-        <div className="max-w-md w-full bg-white p-12 rounded-[40px] shadow-2xl text-center space-y-6 border border-danger/10">
-          <div className="w-20 h-20 bg-danger/10 rounded-full flex items-center justify-center text-danger mx-auto">
-            <AlertCircle className="w-10 h-10" />
+        <div className="max-w-2xl w-full bg-white p-12 rounded-[40px] shadow-2xl space-y-8 border border-danger/10">
+          <div className="text-center space-y-4">
+            <div className="w-20 h-20 bg-danger/10 rounded-full flex items-center justify-center text-danger mx-auto">
+              <AlertCircle className="w-10 h-10" />
+            </div>
+            <h2 className="text-3xl font-black text-secondary">Erro de Configuração</h2>
+            <p className="text-secondary/60 font-medium">{configError}</p>
           </div>
-          <h2 className="text-3xl font-black text-secondary">Erro de Configuração</h2>
-          <p className="text-secondary/60 font-medium">{configError}</p>
-          <div className="pt-4">
+
+          <div className="bg-gray-50 p-8 rounded-3xl space-y-4 border border-gray-100">
+            <h3 className="font-black text-secondary uppercase tracking-widest text-xs">Como resolver no Vercel:</h3>
+            <ol className="space-y-3 text-sm text-secondary/70 list-decimal ml-4 font-medium">
+              <li>Acesse o dashboard do seu projeto no <a href="https://vercel.com" target="_blank" className="text-primary underline">Vercel</a>.</li>
+              <li>Vá em <strong>Settings</strong> &gt; <strong>Environment Variables</strong>.</li>
+              <li>Adicione as seguintes variáveis:
+                <ul className="mt-2 space-y-2 font-mono text-[10px] bg-white p-4 rounded-xl border border-gray-200">
+                  <li className="flex justify-between">
+                    <span className="font-bold">VITE_SUPABASE_URL</span>
+                    <span className="text-secondary/40">Sua URL do Supabase</span>
+                  </li>
+                  <li className="flex justify-between">
+                    <span className="font-bold">VITE_SUPABASE_ANON_KEY</span>
+                    <span className="text-secondary/40">Sua Anon Key do Supabase</span>
+                  </li>
+                </ul>
+              </li>
+              <li>Após adicionar, faça um novo <strong>Redeploy</strong> do seu projeto para aplicar as mudanças.</li>
+            </ol>
+          </div>
+
+          <div className="pt-4 text-center">
             <Link to="/" className="inline-block bg-secondary text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-primary transition-all">
               Voltar para Home
             </Link>
@@ -564,12 +621,15 @@ export const AdminArea = () => {
                   { key: 'nome', label: 'Nome' },
                   { key: 'email', label: 'E-mail' },
                   { key: 'telefone', label: 'Telefone' },
+                  { key: 'endereco', label: 'Endereço' },
                   { key: 'created_at', label: 'Cadastro', render: (val) => new Date(val).toLocaleDateString() }
                 ]}
                 fields={[
                   { key: 'nome', label: 'Nome Completo', type: 'text' },
                   { key: 'email', label: 'E-mail', type: 'email' },
-                  { key: 'telefone', label: 'Telefone', type: 'tel' }
+                  { key: 'telefone', label: 'Telefone', type: 'tel' },
+                  { key: 'endereco', label: 'Endereço', type: 'text' },
+                  { key: 'parent_pin', label: 'PIN de Segurança (4 dígitos)', type: 'text' }
                 ]}
               />
             } />
@@ -580,14 +640,19 @@ export const AdminArea = () => {
                 icon={Backpack}
                 columns={[
                   { key: 'nome', label: 'Nome' },
-                  { key: 'idade', label: 'Idade' },
+                  { key: 'data_nascimento', label: 'Nascimento', render: (val) => val ? new Date(val).toLocaleDateString() : '-' },
                   { key: 'nivel', label: 'Nível' },
+                  { key: 'status', label: 'Status' },
                   { key: 'created_at', label: 'Cadastro', render: (val) => new Date(val).toLocaleDateString() }
                 ]}
                 fields={[
                   { key: 'nome', label: 'Nome do Aluno', type: 'text' },
-                  { key: 'idade', label: 'Idade', type: 'number' },
-                  { key: 'nivel', label: 'Nível/Turma', type: 'select', options: ['Iniciante', 'Intermediário', 'Avançado'] }
+                  { key: 'data_nascimento', label: 'Data de Nascimento', type: 'date' },
+                  { key: 'nivel', label: 'Nível/Turma', type: 'select', options: ['Iniciante', 'Intermediário', 'Avançado', 'Nativo'] },
+                  { key: 'status', label: 'Status', type: 'select', options: ['ativo', 'inativo'] },
+                  { key: 'parent_id', label: 'ID do Responsável (UUID)', type: 'text' },
+                  { key: 'tutor_id', label: 'ID do Tutor (UUID)', type: 'text' },
+                  { key: 'observacoes', label: 'Observações', type: 'text' }
                 ]}
               />
             } />
@@ -598,6 +663,7 @@ export const AdminArea = () => {
                 icon={GraduationCap}
                 columns={[
                   { key: 'nome', label: 'Nome' },
+                  { key: 'email', label: 'E-mail' },
                   { key: 'especialidade', label: 'Especialidade' },
                   { key: 'status', label: 'Status', render: (val) => (
                     <span className={cn(
@@ -610,8 +676,11 @@ export const AdminArea = () => {
                 ]}
                 fields={[
                   { key: 'nome', label: 'Nome do Tutor', type: 'text' },
+                  { key: 'email', label: 'E-mail', type: 'email' },
+                  { key: 'telefone', label: 'Telefone', type: 'tel' },
                   { key: 'especialidade', label: 'Especialidade', type: 'text' },
-                  { key: 'status', label: 'Status', type: 'select', options: ['ativo', 'pendente'] }
+                  { key: 'bio', label: 'Biografia/Experiência', type: 'text' },
+                  { key: 'status', label: 'Status', type: 'select', options: ['ativo', 'pendente', 'inativo'] }
                 ]}
               />
             } />

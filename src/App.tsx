@@ -92,6 +92,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 import { AdminArea } from './components/AdminArea';
+import { StudentParentRegistration, TutorRegistration } from './components/RegistrationForms';
 
 // --- Utility ---
 function cn(...inputs: ClassValue[]) {
@@ -156,13 +157,13 @@ const SupabaseStatus = () => {
         )}
       >
         <div className={cn("w-2 h-2 rounded-full animate-pulse", status === 'connected' ? "bg-success" : "bg-danger")} />
-        {status === 'connected' ? 'Supabase Conectado' : 'Erro Supabase'}
+        {status === 'connected' ? 'Supabase Conectado' : 'Erro de Configuração'}
         {status === 'error' && (
           <button 
-            onClick={() => alert(error)}
+            onClick={() => alert(`Erro: ${error}\n\nVerifique se as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY estão configuradas no Vercel.`)}
             className="ml-1 underline hover:opacity-80"
           >
-            Ver Erro
+            Como resolver?
           </button>
         )}
       </motion.div>
@@ -1491,6 +1492,9 @@ const BlogPage = () => {
 };
 
 const InscricaoPage = () => {
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
   const plans = [
     {
       name: "Online",
@@ -1499,8 +1503,7 @@ const InscricaoPage = () => {
         "1 Child",
         "Online",
         "Até 3 alunos por turma"
-      ],
-      link: "https://forms.gle/ZUquKgmhqrWwBGqS6"
+      ]
     },
     {
       name: "Presencial",
@@ -1510,7 +1513,6 @@ const InscricaoPage = () => {
         "Material Incluso",
         "Até 4 alunos por turma"
       ],
-      link: "https://forms.gle/ZUquKgmhqrWwBGqS6",
       featured: true
     },
     {
@@ -1520,10 +1522,34 @@ const InscricaoPage = () => {
         "Crianças, Pais e Tutores",
         "Conteúdo Virtual",
         "Escolha seu curso"
-      ],
-      link: "https://forms.gle/ZUquKgmhqrWwBGqS6"
+      ]
     }
   ];
+
+  if (showForm && selectedPlan) {
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <PageHeader title={`Inscrição: ${selectedPlan}`} />
+        <section className="py-32 bg-gray-50">
+          <div className="max-w-7xl mx-auto px-8">
+            <button 
+              onClick={() => setShowForm(false)}
+              className="mb-8 flex items-center gap-2 text-secondary font-black uppercase tracking-widest text-xs hover:text-primary transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" /> Voltar para Planos
+            </button>
+            <StudentParentRegistration 
+              planName={selectedPlan} 
+              onSuccess={() => {
+                setShowForm(false);
+                setSelectedPlan(null);
+              }} 
+            />
+          </div>
+        </section>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -1556,9 +1582,11 @@ const InscricaoPage = () => {
                     </li>
                   ))}
                 </ul>
-                <a 
-                  href={plan.link} 
-                  target="_blank"
+                <button 
+                  onClick={() => {
+                    setSelectedPlan(plan.name);
+                    setShowForm(true);
+                  }}
                   className={cn(
                     "w-full py-6 rounded-3xl font-black uppercase tracking-widest text-center transition-all",
                     plan.featured 
@@ -1567,7 +1595,7 @@ const InscricaoPage = () => {
                   )}
                 >
                   Quero este
-                </a>
+                </button>
               </div>
             ))}
           </div>
@@ -2006,7 +2034,7 @@ const AlunosPaisPage = () => {
   const loadFamilyData = async (userId: string) => {
     // 1. Carregar dados da família (PIN, etc)
     const { data: family, error: fError } = await supabase
-      .from('families')
+      .from('pais')
       .select('*')
       .eq('id', userId)
       .single();
@@ -2015,9 +2043,9 @@ const AlunosPaisPage = () => {
 
     // 2. Carregar perfis das crianças
     const { data: childProfiles, error: pError } = await supabase
-      .from('profiles')
+      .from('alunos')
       .select('*')
-      .eq('family_id', userId);
+      .eq('parent_id', userId);
     
     if (childProfiles) setProfiles(childProfiles);
   };
@@ -2058,13 +2086,14 @@ const AlunosPaisPage = () => {
     }
 
     if (authData.user) {
-      // 2. Criar registro na tabela families (o PIN)
+      // 2. Criar registro na tabela pais (o PIN)
       const { error: dbError } = await supabase
-        .from('families')
+        .from('pais')
         .insert([
           { 
             id: authData.user.id, 
             email: data.email, 
+            nome: "Responsável", // Placeholder inicial
             parent_pin: data.parentPin 
           }
         ]);
@@ -2359,6 +2388,7 @@ const AlunosPaisPage = () => {
 
 const TutoresPage = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -2369,6 +2399,24 @@ const TutoresPage = () => {
       setIsLoggedIn(true);
     }
   };
+
+  if (showRegister) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        className="min-h-[80vh] flex flex-col items-center justify-center bg-gray-50 p-6"
+      >
+        <button 
+          onClick={() => setShowRegister(false)}
+          className="mb-8 flex items-center gap-2 text-secondary font-black uppercase tracking-widest text-xs hover:text-primary transition-all"
+        >
+          <ArrowLeft className="w-4 h-4" /> Voltar para Login
+        </button>
+        <TutorRegistration onSuccess={() => setShowRegister(false)} />
+      </motion.div>
+    );
+  }
 
   if (!isLoggedIn) {
     return (
@@ -2417,9 +2465,20 @@ const TutoresPage = () => {
             </button>
           </form>
           
-          <p className="text-center text-sm text-secondary/40 font-medium">
-            Esqueceu sua senha? <span className="text-secondary cursor-pointer hover:underline">Clique aqui</span>
-          </p>
+          <div className="text-center space-y-4">
+            <p className="text-sm text-secondary/40 font-medium">
+              Esqueceu sua senha? <span className="text-secondary cursor-pointer hover:underline">Clique aqui</span>
+            </p>
+            <div className="pt-4 border-t border-gray-100">
+              <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest mb-4">Ainda não é um tutor?</p>
+              <button 
+                onClick={() => setShowRegister(true)}
+                className="text-primary font-black uppercase tracking-widest text-sm hover:underline"
+              >
+                Quero ser Tutor Phaleduc
+              </button>
+            </div>
+          </div>
         </div>
       </motion.div>
     );
