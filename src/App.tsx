@@ -7,6 +7,7 @@ import {
   useLocation,
   useNavigate
 } from 'react-router-dom';
+import { supabase } from './lib/supabase';
 import { 
   Phone, 
   Mail, 
@@ -44,6 +45,7 @@ import {
   Download,
   Video,
   Lock,
+  UserPlus,
   Bell,
   Plus,
   Filter,
@@ -89,6 +91,8 @@ import {
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+import { AdminArea } from './components/AdminArea';
+
 // --- Utility ---
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -111,6 +115,60 @@ const GALLERY_IMAGES = [
 ];
 
 // --- Components ---
+
+const SupabaseStatus = () => {
+  const [status, setStatus] = useState<'loading' | 'connected' | 'error'>('loading');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function checkConnection() {
+      try {
+        // Simple check that doesn't require a specific table
+        const { error: authError } = await supabase.auth.getSession();
+        
+        if (authError) {
+          throw authError;
+        }
+        
+        setStatus('connected');
+      } catch (err: any) {
+        console.error('Supabase connection error:', err);
+        setStatus('error');
+        setError(err.message || 'Erro desconhecido ao conectar ao Supabase');
+      }
+    }
+
+    checkConnection();
+  }, []);
+
+  if (status === 'loading') return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 z-[100]">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={cn(
+          "px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-xs font-black uppercase tracking-widest border",
+          status === 'connected' 
+            ? "bg-success/10 text-success border-success/20" 
+            : "bg-danger/10 text-danger border-danger/20"
+        )}
+      >
+        <div className={cn("w-2 h-2 rounded-full animate-pulse", status === 'connected' ? "bg-success" : "bg-danger")} />
+        {status === 'connected' ? 'Supabase Conectado' : 'Erro Supabase'}
+        {status === 'error' && (
+          <button 
+            onClick={() => alert(error)}
+            className="ml-1 underline hover:opacity-80"
+          >
+            Ver Erro
+          </button>
+        )}
+      </motion.div>
+    </div>
+  );
+};
 
 const TopBar = () => (
   <div className="hidden md:block py-3 bg-brand-green text-secondary text-sm font-bold">
@@ -661,6 +719,7 @@ const Footer = () => (
 
 const HomePage = () => (
   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    <SupabaseStatus />
     <Hero />
     <Features />
     <TeacherIntro />
@@ -1626,7 +1685,7 @@ interface ChildProfile {
 
 // --- Componentes Modulares do Portal ---
 
-const LoginView = ({ onLogin }: { onLogin: (data: any) => void }) => {
+const LoginView = ({ onLogin, onSwitchToRegister }: { onLogin: (data: any) => void, onSwitchToRegister: () => void }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -1677,7 +1736,109 @@ const LoginView = ({ onLogin }: { onLogin: (data: any) => void }) => {
         
         <div className="mt-8 pt-8 border-t border-gray-100 text-center">
           <p className="text-xs text-secondary/40 font-medium">
-            Novo por aqui? <button className="text-primary font-black hover:underline">Criar conta familiar</button>
+            Novo por aqui? <button onClick={onSwitchToRegister} className="text-primary font-black hover:underline">Criar conta familiar</button>
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const RegisterView = ({ onRegister, onSwitchToLogin }: { onRegister: (data: any) => void, onSwitchToLogin: () => void }) => {
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    confirmPassword: "",
+    parentPin: ""
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.password !== formData.confirmPassword) {
+      alert("As senhas não coincidem!");
+      return;
+    }
+    if (formData.parentPin.length !== 4) {
+      alert("O PIN deve ter 4 dígitos!");
+      return;
+    }
+    onRegister(formData);
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)] bg-gray-50"
+    >
+      <div className="max-w-md w-full bg-white rounded-[40px] p-12 shadow-2xl shadow-secondary/5 border border-gray-100">
+        <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
+          <UserPlus className="w-10 h-10" />
+        </div>
+        <h2 className="text-3xl font-black text-secondary text-center mb-2 tracking-tighter">Criar Conta Familiar</h2>
+        <p className="text-secondary/50 text-center mb-10 font-medium">Comece sua jornada bilingue hoje mesmo.</p>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">E-mail</label>
+            <input 
+              type="email" 
+              required
+              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+              placeholder="exemplo@email.com"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Senha</label>
+              <input 
+                type="password" 
+                required
+                className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Confirmar</label>
+              <input 
+                type="password" 
+                required
+                className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+                placeholder="••••••••"
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">PIN de Segurança (4 dígitos)</label>
+            <input 
+              type="password" 
+              maxLength={4}
+              required
+              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-black text-secondary text-center tracking-[1em]"
+              placeholder="••••"
+              value={formData.parentPin}
+              onChange={(e) => setFormData({ ...formData, parentPin: e.target.value })}
+            />
+            <p className="text-[9px] text-secondary/30 font-bold ml-4">Este PIN será usado para acessar o Modo Família.</p>
+          </div>
+          <button 
+            type="submit"
+            className="w-full py-5 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20 mt-4"
+          >
+            Criar Minha Conta
+          </button>
+        </form>
+        
+        <div className="mt-8 pt-8 border-t border-gray-100 text-center">
+          <p className="text-xs text-secondary/40 font-medium">
+            Já tem uma conta? <button onClick={onSwitchToLogin} className="text-primary font-black hover:underline">Fazer Login</button>
           </p>
         </div>
       </div>
@@ -1742,22 +1903,23 @@ const ProfileSelectionView = ({
 const PinVerificationModal = ({ 
   isOpen, 
   onClose, 
-  onSuccess 
+  onSuccess,
+  correctPin
 }: { 
   isOpen: boolean, 
   onClose: () => void, 
-  onSuccess: () => void 
+  onSuccess: () => void,
+  correctPin: string
 }) => {
   const [pin, setPin] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Em produção: Comparar com family.parent_pin vindo do banco (Supabase)
-    if (pin === "1234") {
+    if (pin === correctPin) {
       onSuccess();
       setPin("");
     } else {
-      alert("PIN Incorreto! Tente 1234");
+      alert("PIN incorreto!");
       setPin("");
     }
   };
@@ -1819,21 +1981,110 @@ const PinVerificationModal = ({
 };
 
 const AlunosPaisPage = () => {
-  /**
-   * GERENCIAMENTO DE SESSÃO (NextAuth Strategy):
-   * 1. 'familySession': Gerencia se os pais estão logados na conta principal.
-   * 2. 'activeProfile': Gerencia qual criança está usando o app no momento.
-   * Em produção, 'familySession' seria um cookie HttpOnly do NextAuth.
-   * 'activeProfile' pode ser um cookie simples ou estado no Context/Zustand.
-   */
-  const [view, setView] = useState<'login' | 'profiles' | 'child' | 'parent'>('login');
-  const [selectedChild, setSelectedChild] = useState<typeof CHILDREN_PROFILES[0] | null>(null);
+  const [view, setView] = useState<'login' | 'register' | 'profiles' | 'child' | 'parent'>('login');
+  const [selectedChild, setSelectedChild] = useState<any | null>(null);
   const [pinModalOpen, setPinModalOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [familyData, setFamilyData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogin = (data: any) => {
-    // Simulação: Em Next.js usaríamos signIn('credentials', data)
-    console.log("Autenticando família:", data.email);
-    setView('profiles');
+  // Verificar sessão ao carregar
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setUser(session.user);
+        await loadFamilyData(session.user.id);
+        setView('profiles');
+      }
+      setLoading(false);
+    };
+    checkSession();
+  }, []);
+
+  const loadFamilyData = async (userId: string) => {
+    // 1. Carregar dados da família (PIN, etc)
+    const { data: family, error: fError } = await supabase
+      .from('families')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (family) setFamilyData(family);
+
+    // 2. Carregar perfis das crianças
+    const { data: childProfiles, error: pError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('family_id', userId);
+    
+    if (childProfiles) setProfiles(childProfiles);
+  };
+
+  const handleLogin = async (data: any) => {
+    setLoading(true);
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
+      email: data.email,
+      password: data.password,
+    });
+
+    if (error) {
+      alert("Erro ao entrar: " + error.message);
+      setLoading(false);
+      return;
+    }
+
+    if (authData.user) {
+      setUser(authData.user);
+      await loadFamilyData(authData.user.id);
+      setView('profiles');
+    }
+    setLoading(false);
+  };
+
+  const handleRegister = async (data: any) => {
+    setLoading(true);
+    // 1. Criar usuário no Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
+    });
+
+    if (authError) {
+      alert("Erro no cadastro: " + authError.message);
+      setLoading(false);
+      return;
+    }
+
+    if (authData.user) {
+      // 2. Criar registro na tabela families (o PIN)
+      const { error: dbError } = await supabase
+        .from('families')
+        .insert([
+          { 
+            id: authData.user.id, 
+            email: data.email, 
+            parent_pin: data.parentPin 
+          }
+        ]);
+
+      if (dbError) {
+        console.error("Erro ao salvar dados da família:", dbError);
+      }
+
+      alert("Conta criada com sucesso! Verifique seu e-mail (se habilitado) ou faça login.");
+      setView('login');
+    }
+    setLoading(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setProfiles([]);
+    setFamilyData(null);
+    setView('login');
   };
 
   const handleProfileSelect = (profile: any) => {
@@ -1846,19 +2097,37 @@ const AlunosPaisPage = () => {
     setView('parent');
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-[calc(100vh-112px)] flex items-center justify-center bg-white">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-[calc(100vh-112px)] bg-white font-display overflow-hidden relative">
       <AnimatePresence mode="wait">
         {view === 'login' && (
-          <LoginView onLogin={handleLogin} />
+          <LoginView 
+            onLogin={handleLogin} 
+            onSwitchToRegister={() => setView('register')} 
+          />
+        )}
+
+        {view === 'register' && (
+          <RegisterView 
+            onRegister={handleRegister} 
+            onSwitchToLogin={() => setView('login')} 
+          />
         )}
 
         {view === 'profiles' && (
           <ProfileSelectionView 
-            profiles={CHILDREN_PROFILES}
+            profiles={profiles}
             onSelectProfile={handleProfileSelect}
             onParentAccess={() => setPinModalOpen(true)}
-            onLogout={() => setView('login')}
+            onLogout={handleLogout}
           />
         )}
 
@@ -2082,6 +2351,7 @@ const AlunosPaisPage = () => {
         isOpen={pinModalOpen} 
         onClose={() => setPinModalOpen(false)} 
         onSuccess={handleParentSuccess} 
+        correctPin={familyData?.parent_pin || "1234"}
       />
     </div>
   );
@@ -2608,30 +2878,40 @@ const ScrollToTop = () => {
 export default function App() {
   return (
     <Router>
-      <div className="min-h-screen font-sans">
-        <ScrollToTop />
-        <TopBar />
-        <Navbar />
-        <main>
-          <AnimatePresence mode="wait">
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/sobre" element={<SobrePage />} />
-              <Route path="/aulas" element={<AulasPage />} />
-              <Route path="/loja" element={<LojaPage />} />
-              <Route path="/depoimentos" element={<DepoimentosPage />} />
-              <Route path="/fotos" element={<FotosPage />} />
-              <Route path="/blog" element={<BlogPage />} />
-              <Route path="/inscricao" element={<InscricaoPage />} />
-              <Route path="/contato" element={<ContatoPage />} />
-              <Route path="/jogos" element={<GamesPlatform />} />
-              <Route path="/alunos-pais" element={<AlunosPaisPage />} />
-              <Route path="/tutores" element={<TutoresPage />} />
-            </Routes>
-          </AnimatePresence>
-        </main>
-        <Footer />
-      </div>
+      <AppContent />
     </Router>
+  );
+}
+
+function AppContent() {
+  const location = useLocation();
+  const isAdmin = location.pathname.startsWith('/admin');
+
+  return (
+    <div className="min-h-screen font-sans">
+      <ScrollToTop />
+      {!isAdmin && <TopBar />}
+      {!isAdmin && <Navbar />}
+      <main>
+        <AnimatePresence mode="wait">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/sobre" element={<SobrePage />} />
+            <Route path="/aulas" element={<AulasPage />} />
+            <Route path="/loja" element={<LojaPage />} />
+            <Route path="/depoimentos" element={<DepoimentosPage />} />
+            <Route path="/fotos" element={<FotosPage />} />
+            <Route path="/blog" element={<BlogPage />} />
+            <Route path="/inscricao" element={<InscricaoPage />} />
+            <Route path="/contato" element={<ContatoPage />} />
+            <Route path="/jogos" element={<GamesPlatform />} />
+            <Route path="/alunos-pais" element={<AlunosPaisPage />} />
+            <Route path="/tutores" element={<TutoresPage />} />
+            <Route path="/admin/*" element={<AdminArea />} />
+          </Routes>
+        </AnimatePresence>
+      </main>
+      {!isAdmin && <Footer />}
+    </div>
   );
 }
