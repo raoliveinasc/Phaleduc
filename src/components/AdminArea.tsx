@@ -208,14 +208,16 @@ const ManageResource = ({
   columns, 
   fields,
   icon: Icon,
-  customSelect = '*'
+  customSelect = '*',
+  extraActions
 }: { 
   title: string, 
   table: string, 
   columns: { key: string, label: string, render?: (val: any, item?: any) => React.ReactNode }[],
   fields: { key: string, label: string, type: string, options?: (string | { value: string, label: string })[] }[],
   icon: any,
-  customSelect?: string
+  customSelect?: string,
+  extraActions?: (item: any, reload: () => void) => React.ReactNode
 }) => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -419,6 +421,7 @@ const ManageResource = ({
                     </td>
                     <td className="px-8 py-6 border-b border-gray-50 text-right">
                       <div className="flex justify-end gap-2">
+                        {extraActions && extraActions(item, fetchData)}
                         <button 
                           onClick={() => handleOpenModal(item)}
                           className="p-2 text-secondary/20 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
@@ -704,6 +707,46 @@ export const AdminArea = () => {
                   { key: 'bio', label: 'Biografia/Experiência', type: 'text' },
                   { key: 'status', label: 'Status', type: 'select', options: ['ativo', 'pendente', 'inativo'] }
                 ]}
+                extraActions={(tutor, reload) => {
+                  const handleInvite = async () => {
+                    if (tutor.status !== 'ativo') {
+                      alert('O tutor precisa estar com status "ativo" para receber um convite.');
+                      return;
+                    }
+
+                    const tempPassword = Math.random().toString(36).slice(-8).toUpperCase();
+                    
+                    if (!confirm(`Deseja gerar uma senha temporária para ${tutor.nome}?\n\nNova senha: ${tempPassword}`)) return;
+
+                    try {
+                      const { error } = await supabase
+                        .from('tutores')
+                        .update({ 
+                          senha_temporaria: tempPassword,
+                          convite_enviado_em: new Date().toISOString()
+                        })
+                        .eq('id', tutor.id);
+
+                      if (error) throw error;
+                      
+                      alert(`Convite gerado com sucesso!\n\nSenha Temporária: ${tempPassword}\n\nO tutor agora pode acessar o portal usando seu e-mail e esta senha.`);
+                      reload();
+                    } catch (err: any) {
+                      console.error('Error inviting tutor:', err);
+                      alert('Erro ao gerar convite. Verifique se a tabela de tutores possui os campos "senha_temporaria" e "convite_enviado_em".');
+                    }
+                  };
+
+                  return (
+                    <button 
+                      onClick={handleInvite}
+                      title="Enviar Convite (Gerar Senha)"
+                      className="p-2 text-secondary/20 hover:text-success hover:bg-success/10 rounded-lg transition-all"
+                    >
+                      <Mail className="w-4 h-4" />
+                    </button>
+                  );
+                }}
               />
             } />
           </Routes>
