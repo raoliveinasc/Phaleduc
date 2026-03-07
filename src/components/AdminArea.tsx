@@ -654,6 +654,41 @@ export const AdminArea = () => {
                   { key: 'endereco', label: 'Endereço', type: 'text' },
                   { key: 'parent_pin', label: 'PIN de Segurança (4 dígitos)', type: 'text' }
                 ]}
+                extraActions={(pai, reload) => {
+                  const handleInvite = async () => {
+                    const tempPassword = Math.random().toString(36).slice(-8).toUpperCase();
+                    
+                    if (!confirm(`Deseja gerar uma senha temporária para ${pai.nome}?\n\nNova senha: ${tempPassword}`)) return;
+
+                    try {
+                      const { error } = await supabase
+                        .from('pais')
+                        .update({ 
+                          senha_temporaria: tempPassword,
+                          convite_enviado_em: new Date().toISOString()
+                        })
+                        .eq('id', pai.id);
+
+                      if (error) throw error;
+                      
+                      alert(`Convite gerado com sucesso!\n\nSenha Temporária: ${tempPassword}\n\nO pai agora pode acessar o portal usando seu e-mail e esta senha.`);
+                      reload();
+                    } catch (err: any) {
+                      console.error('Error inviting parent:', err);
+                      alert('Erro ao gerar convite. Verifique se a tabela de pais possui os campos "senha_temporaria" e "convite_enviado_em".');
+                    }
+                  };
+
+                  return (
+                    <button 
+                      onClick={handleInvite}
+                      title="Enviar Convite (Gerar Senha)"
+                      className="p-2 text-secondary/20 hover:text-success hover:bg-success/10 rounded-lg transition-all"
+                    >
+                      <Mail className="w-4 h-4" />
+                    </button>
+                  );
+                }}
               />
             } />
             <Route path="/alunos" element={

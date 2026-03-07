@@ -1713,6 +1713,231 @@ interface ChildProfile {
 
 // --- Componentes Modulares do Portal ---
 
+// --- Componentes Modulares do Portal ---
+
+const PasswordCreationView = ({ 
+  onSuccess, 
+  userName, 
+  userId 
+}: { 
+  onSuccess: () => void, 
+  userName: string, 
+  userId: string 
+}) => {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      alert("As senhas não coincidem!");
+      return;
+    }
+    if (newPassword.length < 6) {
+      alert("A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('pais')
+        .update({ 
+          senha: newPassword,
+          senha_temporaria: null 
+        })
+        .eq('id', userId);
+
+      if (error) throw error;
+      onSuccess();
+    } catch (err) {
+      console.error("Error saving password:", err);
+      alert("Erro ao salvar senha.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)] bg-gray-50"
+    >
+      <div className="max-w-md w-full bg-white rounded-[40px] p-12 shadow-2xl border border-gray-100">
+        <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
+          <Unlock className="w-10 h-10" />
+        </div>
+        <h2 className="text-3xl font-black text-secondary text-center mb-2 tracking-tighter">Criar sua Senha</h2>
+        <p className="text-secondary/50 text-center mb-10 font-medium">Olá, {userName}! Para sua segurança, crie uma senha definitiva.</p>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Nova Senha</label>
+            <input 
+              type="password" 
+              required
+              minLength={6}
+              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-secondary"
+              placeholder="••••••••"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Confirmar Senha</label>
+            <input 
+              type="password" 
+              required
+              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-secondary"
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+          <button 
+            type="submit"
+            disabled={isSaving}
+            className="w-full py-5 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20 disabled:opacity-50"
+          >
+            {isSaving ? "Salvando..." : "Definir Senha"}
+          </button>
+        </form>
+      </div>
+    </motion.div>
+  );
+};
+
+const ChildRegistrationView = ({ 
+  onSuccess, 
+  parentId 
+}: { 
+  onSuccess: () => void, 
+  parentId: string 
+}) => {
+  const [children, setChildren] = useState([{ name: "", age: "" }]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const addChild = () => setChildren([...children, { name: "", age: "" }]);
+  const removeChild = (index: number) => setChildren(children.filter((_, i) => i !== index));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (children.some(c => !c.name || !c.age)) {
+      alert("Preencha todos os campos das crianças.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const childrenToInsert = children.map(c => ({
+        parent_id: parentId,
+        nome: c.name,
+        data_nascimento: new Date(new Date().getFullYear() - parseInt(c.age), 0, 1).toISOString().split('T')[0], // Estimativa baseada na idade
+        nivel: 'Iniciante',
+        status: 'ativo'
+      }));
+
+      const { error } = await supabase
+        .from('alunos')
+        .insert(childrenToInsert);
+
+      if (error) throw error;
+      onSuccess();
+    } catch (err) {
+      console.error("Error registering children:", err);
+      alert("Erro ao cadastrar crianças.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)] bg-gray-50"
+    >
+      <div className="max-w-2xl w-full bg-white rounded-[40px] p-12 shadow-2xl border border-gray-100">
+        <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
+          <PlusCircle className="w-10 h-10" />
+        </div>
+        <h2 className="text-3xl font-black text-secondary text-center mb-2 tracking-tighter">Cadastrar Crianças</h2>
+        <p className="text-secondary/50 text-center mb-10 font-medium">Adicione as crianças que farão parte da Phaleduc.</p>
+        
+        <form onSubmit={handleSubmit} className="space-y-8">
+          <div className="space-y-6">
+            {children.map((child, index) => (
+              <div key={index} className="p-6 bg-gray-50 rounded-3xl border border-gray-100 relative group">
+                {children.length > 1 && (
+                  <button 
+                    type="button"
+                    onClick={() => removeChild(index)}
+                    className="absolute -top-2 -right-2 w-8 h-8 bg-danger text-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Nome da Criança</label>
+                    <input 
+                      type="text" 
+                      required
+                      className="w-full px-6 py-3 bg-white rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-secondary"
+                      placeholder="Nome completo"
+                      value={child.name}
+                      onChange={(e) => {
+                        const newChildren = [...children];
+                        newChildren[index].name = e.target.value;
+                        setChildren(newChildren);
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Idade</label>
+                    <input 
+                      type="number" 
+                      required
+                      min="1"
+                      max="18"
+                      className="w-full px-6 py-3 bg-white rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-secondary"
+                      placeholder="Ex: 7"
+                      value={child.age}
+                      onChange={(e) => {
+                        const newChildren = [...children];
+                        newChildren[index].age = e.target.value;
+                        setChildren(newChildren);
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button 
+            type="button"
+            onClick={addChild}
+            className="w-full py-4 border-2 border-dashed border-primary/30 text-primary rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-primary/5 transition-all flex items-center justify-center gap-2"
+          >
+            <Plus className="w-4 h-4" /> Adicionar outra criança
+          </button>
+
+          <button 
+            type="submit"
+            disabled={isSaving}
+            className="w-full py-5 bg-secondary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-secondary/20 disabled:opacity-50"
+          >
+            {isSaving ? "Salvando..." : "Concluir Cadastro"}
+          </button>
+        </form>
+      </div>
+    </motion.div>
+  );
+};
+
 const LoginView = ({ onLogin, onSwitchToRegister }: { onLogin: (data: any) => void, onSwitchToRegister: () => void }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -2009,13 +2234,17 @@ const PinVerificationModal = ({
 };
 
 const AlunosPaisPage = () => {
-  const [view, setView] = useState<'login' | 'register' | 'profiles' | 'child' | 'parent'>('login');
+  const [view, setView] = useState<'login' | 'register' | 'profiles' | 'child' | 'parent' | 'create-password' | 'register-children'>('login');
   const [selectedChild, setSelectedChild] = useState<any | null>(null);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [familyData, setFamilyData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
 
   // Verificar sessão ao carregar
   useEffect(() => {
@@ -2023,8 +2252,13 @@ const AlunosPaisPage = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setUser(session.user);
-        await loadFamilyData(session.user.id);
-        setView('profiles');
+        const family = await loadFamilyData(session.user.id);
+        
+        if (family?.senha_temporaria) {
+          setView('create-password');
+        } else {
+          setView('profiles');
+        }
       }
       setLoading(false);
     };
@@ -2048,10 +2282,56 @@ const AlunosPaisPage = () => {
       .eq('parent_id', userId);
     
     if (childProfiles) setProfiles(childProfiles);
+    
+    return family;
   };
 
   const handleLogin = async (data: any) => {
     setLoading(true);
+    
+    // Tentar login customizado primeiro (para suporte a senha temporária e senha na tabela pais)
+    const { data: family, error: fError } = await supabase
+      .from('pais')
+      .select('*')
+      .eq('email', data.email)
+      .single();
+
+    if (family) {
+      const isValidPassword = (family.senha && family.senha === data.password) || 
+                              (family.senha_temporaria && family.senha_temporaria === data.password);
+      
+      if (isValidPassword) {
+        // Se a senha for válida na tabela, tentamos logar no Auth do Supabase também
+        // (Assumindo que o usuário existe no Auth com o mesmo e-mail)
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
+        });
+
+        // Se o login no Auth falhar mas a senha na tabela estiver correta, 
+        // pode ser que o usuário ainda não tenha sido criado no Auth ou a senha seja diferente.
+        // Para simplificar e seguir o fluxo do tutor, vamos considerar o login válido se estiver na tabela.
+        setUser({ id: family.id, email: family.email });
+        setFamilyData(family);
+        await loadFamilyData(family.id);
+
+        if (family.senha_temporaria && family.senha_temporaria === data.password) {
+          setView('create-password');
+        } else {
+          // Verificar se tem crianças, se não tiver, forçar cadastro
+          const { data: children } = await supabase.from('alunos').select('id').eq('parent_id', family.id);
+          if (!children || children.length === 0) {
+            setView('register-children');
+          } else {
+            setView('profiles');
+          }
+        }
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Fallback para login padrão do Supabase Auth
     const { data: authData, error } = await supabase.auth.signInWithPassword({
       email: data.email,
       password: data.password,
@@ -2065,8 +2345,18 @@ const AlunosPaisPage = () => {
 
     if (authData.user) {
       setUser(authData.user);
-      await loadFamilyData(authData.user.id);
-      setView('profiles');
+      const family = await loadFamilyData(authData.user.id);
+      if (family?.senha_temporaria) {
+        setView('create-password');
+      } else {
+        // Verificar se tem crianças
+        const { data: children } = await supabase.from('alunos').select('id').eq('parent_id', authData.user.id);
+        if (!children || children.length === 0) {
+          setView('register-children');
+        } else {
+          setView('profiles');
+        }
+      }
     }
     setLoading(false);
   };
@@ -2126,6 +2416,42 @@ const AlunosPaisPage = () => {
     setView('parent');
   };
 
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      alert('As senhas não coincidem.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      alert('A senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+
+    setIsSavingPassword(true);
+    try {
+      const { error } = await supabase
+        .from('pais')
+        .update({ 
+          senha: newPassword,
+          senha_temporaria: null 
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      alert('Senha atualizada com sucesso!');
+      setShowPasswordChange(false);
+      setNewPassword('');
+      setConfirmPassword('');
+      setFamilyData({ ...familyData, senha: newPassword, senha_temporaria: null });
+    } catch (err) {
+      console.error('Error saving password:', err);
+      alert('Erro ao salvar nova senha.');
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-[calc(100vh-112px)] flex items-center justify-center bg-white">
@@ -2148,6 +2474,33 @@ const AlunosPaisPage = () => {
           <RegisterView 
             onRegister={handleRegister} 
             onSwitchToLogin={() => setView('login')} 
+          />
+        )}
+
+        {view === 'create-password' && (
+          <PasswordCreationView 
+            userId={user?.id}
+            userName={familyData?.nome || "Responsável"}
+            onSuccess={async () => {
+              await loadFamilyData(user.id);
+              // Após criar senha, verificar se tem crianças
+              const { data: children } = await supabase.from('alunos').select('id').eq('parent_id', user.id);
+              if (!children || children.length === 0) {
+                setView('register-children');
+              } else {
+                setView('profiles');
+              }
+            }}
+          />
+        )}
+
+        {view === 'register-children' && (
+          <ChildRegistrationView 
+            parentId={user?.id}
+            onSuccess={async () => {
+              await loadFamilyData(user.id);
+              setView('profiles');
+            }}
           />
         )}
 
@@ -2294,6 +2647,12 @@ const AlunosPaisPage = () => {
                   <Unlock className="w-4 h-4" /> Modo Família Ativo
                 </div>
                 <h2 className="text-4xl md:text-5xl font-black text-secondary tracking-tighter">Painel de Acompanhamento</h2>
+                <button 
+                  onClick={() => setShowPasswordChange(!showPasswordChange)}
+                  className="mt-4 flex items-center gap-2 text-[10px] font-black text-secondary/40 hover:text-primary transition-all uppercase tracking-widest"
+                >
+                  <Settings className="w-4 h-4" /> Configurações de Segurança
+                </button>
               </div>
               <button 
                 onClick={() => setView('profiles')}
@@ -2302,6 +2661,59 @@ const AlunosPaisPage = () => {
                 Sair do Painel
               </button>
             </header>
+
+            <AnimatePresence>
+              {showPasswordChange && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="max-w-7xl mx-auto mb-16 overflow-hidden"
+                >
+                  <div className="bg-gray-50 p-10 rounded-[40px] border border-gray-100">
+                    <div className="flex justify-between items-center mb-8">
+                      <h3 className="text-2xl font-black text-secondary">Alterar Senha</h3>
+                      <button onClick={() => setShowPasswordChange(false)} className="text-secondary/40 hover:text-danger"><X className="w-6 h-6" /></button>
+                    </div>
+                    <form onSubmit={handleUpdatePassword} className="grid md:grid-cols-2 gap-6 items-end">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-4">Nova Senha</label>
+                        <input 
+                          type="password" 
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="w-full px-6 py-4 bg-white border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                          placeholder="••••••••"
+                          required
+                          minLength={6}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-4">Confirmar Senha</label>
+                        <input 
+                          type="password" 
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="w-full px-6 py-4 bg-white border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                          placeholder="••••••••"
+                          required
+                          minLength={6}
+                        />
+                      </div>
+                      <div className="md:col-span-2 flex justify-end">
+                        <button 
+                          type="submit"
+                          disabled={isSavingPassword}
+                          className="bg-primary text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                        >
+                          {isSavingPassword ? 'Salvando...' : 'Atualizar Senha'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-12">
               {/* Stats Chart */}
