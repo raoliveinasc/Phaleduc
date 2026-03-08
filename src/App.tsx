@@ -2164,49 +2164,66 @@ const ProfileSelectionView = ({
   onSelectProfile: (p: any) => void, 
   onParentAccess: () => void,
   onLogout: () => void
-}) => (
-  <motion.div 
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0, scale: 0.95 }}
-    className="bg-brand-green flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)]"
-  >
-    <h1 className="text-4xl md:text-6xl font-black text-secondary mb-12 text-center tracking-tighter leading-none">Quem está aprendendo hoje?</h1>
-    
-    <div className="flex flex-wrap justify-center gap-12 mb-16">
-      {profiles.map((profile) => (
-        <button 
-          key={profile.id}
-          onClick={() => onSelectProfile(profile)}
-          className="group flex flex-col items-center gap-4 transition-transform hover:scale-110"
-        >
-          <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white border-4 border-transparent group-hover:border-primary flex items-center justify-center text-6xl md:text-7xl shadow-2xl transition-all overflow-hidden relative">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            {profile.avatar}
-          </div>
-          <span className="text-2xl font-black text-secondary group-hover:text-primary transition-colors tracking-tight">{profile.name}</span>
-        </button>
-      ))}
-      
-      <button 
-        onClick={onParentAccess}
-        className="group flex flex-col items-center gap-4 transition-transform hover:scale-110"
-      >
-        <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white/50 border-4 border-dashed border-secondary/20 group-hover:border-secondary/40 flex items-center justify-center text-secondary/40 transition-all">
-          <Lock className="w-12 h-12" />
-        </div>
-        <span className="text-2xl font-black text-secondary/40 group-hover:text-secondary/60 transition-colors tracking-tight">Modo Família</span>
-      </button>
-    </div>
+}) => {
+  const profileColors = [
+    'bg-blue-500',
+    'bg-red-500',
+    'bg-green-500',
+    'bg-yellow-500',
+    'bg-purple-500',
+    'bg-pink-500',
+    'bg-indigo-500'
+  ];
 
-    <button 
-      onClick={onLogout}
-      className="text-secondary/30 font-black tracking-widest uppercase text-xs hover:text-secondary/60 transition-colors"
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="bg-[#141414] flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)]"
     >
-      Trocar de Conta • Sair
-    </button>
-  </motion.div>
-);
+      <h1 className="text-3xl md:text-5xl font-medium text-white mb-12 text-center tracking-tight">Quem está aprendendo hoje?</h1>
+      
+      <div className="flex flex-wrap justify-center gap-6 md:gap-10 mb-20">
+        {profiles.map((profile, index) => (
+          <button 
+            key={profile.id}
+            onClick={() => onSelectProfile(profile)}
+            className="group flex flex-col items-center gap-4"
+          >
+            <div className={cn(
+              "w-28 h-28 md:w-36 md:h-36 rounded-md flex items-center justify-center text-5xl md:text-6xl transition-all duration-200 group-hover:ring-4 group-hover:ring-white group-hover:scale-105 relative overflow-hidden shadow-lg",
+              profile.avatar ? "bg-white/10" : profileColors[index % profileColors.length]
+            )}>
+              {profile.avatar || profile.name?.[0]?.toUpperCase() || '👶'}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+            </div>
+            <span className="text-lg md:text-xl font-medium text-gray-400 group-hover:text-white transition-colors">{profile.name}</span>
+          </button>
+        ))}
+        
+        <button 
+          onClick={onParentAccess}
+          className="group flex flex-col items-center gap-4"
+        >
+          <div className="w-28 h-28 md:w-36 md:h-36 rounded-md bg-white/5 flex items-center justify-center text-gray-500 transition-all duration-200 group-hover:ring-4 group-hover:ring-white group-hover:scale-105">
+            <Lock className="w-10 h-10" />
+          </div>
+          <span className="text-lg md:text-xl font-medium text-gray-500 group-hover:text-white transition-colors">Modo Família</span>
+        </button>
+      </div>
+
+      <div className="flex flex-col items-center gap-8">
+        <button 
+          onClick={onLogout}
+          className="px-8 py-2 border border-gray-600 text-gray-500 font-medium tracking-widest uppercase text-xs hover:text-white hover:border-white transition-all"
+        >
+          Gerenciar Perfis • Sair
+        </button>
+      </div>
+    </motion.div>
+  );
+};
 
 const PinVerificationModal = ({ 
   isOpen, 
