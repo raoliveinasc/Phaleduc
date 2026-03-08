@@ -22,6 +22,37 @@ CREATE TABLE IF NOT EXISTS feedbacks_pedagogicos (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Tabela de Tutores (Educadores)
+CREATE TABLE IF NOT EXISTS tutores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nome TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    telefone TEXT,
+    especialidade TEXT,
+    bio TEXT,
+    senha TEXT,
+    senha_temporaria TEXT,
+    convite_enviado_em TIMESTAMP WITH TIME ZONE,
+    status TEXT DEFAULT 'pendente',
+    nivel TEXT DEFAULT 'Bronze',
+    xp INTEGER DEFAULT 0,
+    badges TEXT, -- Lista de badges separados por vírgula
+    projeto_final_status TEXT DEFAULT 'pendente',
+    projeto_final_feedback TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela para avaliações de desempenho dos tutores
+CREATE TABLE IF NOT EXISTS avaliacoes_tutores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tutor_id UUID REFERENCES tutores(id) ON DELETE CASCADE,
+    desempenho_alunos INTEGER CHECK (desempenho_alunos >= 1 AND desempenho_alunos <= 5),
+    feedback_pais INTEGER CHECK (feedback_pais >= 1 AND feedback_pais <= 5),
+    observacoes TEXT,
+    data_avaliacao DATE DEFAULT CURRENT_DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Tabela para controle do loop semanal (desbloqueio de trilha)
 CREATE TABLE IF NOT EXISTS loop_semanal_config (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

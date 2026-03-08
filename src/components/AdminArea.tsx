@@ -32,7 +32,12 @@ import {
   BookOpen,
   X,
   Backpack,
-  PlusCircle
+  PlusCircle,
+  Star,
+  Trophy,
+  ClipboardCheck,
+  MessageSquare,
+  Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -539,11 +544,130 @@ const ManageResource = ({
 
 // --- Main Admin Area ---
 
+const TutorEvaluationModal = ({ tutor, onClose, onSave }: { tutor: any, onClose: () => void, onSave: () => void }) => {
+  const [evalData, setEvalData] = useState({
+    desempenho_alunos: 0,
+    feedback_pais: 0,
+    observacoes: '',
+    data_avaliacao: new Date().toISOString().split('T')[0]
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('avaliacoes_tutores')
+        .insert([{
+          tutor_id: tutor.id,
+          ...evalData
+        }]);
+
+      if (error) throw error;
+      alert('Avaliação salva com sucesso!');
+      onSave();
+      onClose();
+    } catch (err: any) {
+      console.error('Error saving evaluation:', err);
+      alert('Erro ao salvar avaliação. Certifique-se de que a tabela "avaliacoes_tutores" existe.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden"
+      >
+        <div className="bg-secondary p-8 text-white flex justify-between items-center">
+          <div>
+            <h3 className="text-2xl font-black">Avaliação de Desempenho</h3>
+            <p className="text-white/60 font-medium">Tutor: {tutor.nome}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-all">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-8 space-y-8">
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <label className="text-xs font-black uppercase tracking-widest text-secondary/40">Desempenho dos Alunos (1-5)</label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button 
+                    key={star}
+                    onClick={() => setEvalData({ ...evalData, desempenho_alunos: star })}
+                    className={cn(
+                      "p-2 rounded-xl transition-all",
+                      evalData.desempenho_alunos >= star ? "bg-primary text-white" : "bg-gray-100 text-gray-300"
+                    )}
+                  >
+                    <Star className="w-6 h-6 fill-current" />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <label className="text-xs font-black uppercase tracking-widest text-secondary/40">Feedback dos Pais (1-5)</label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button 
+                    key={star}
+                    onClick={() => setEvalData({ ...evalData, feedback_pais: star })}
+                    className={cn(
+                      "p-2 rounded-xl transition-all",
+                      evalData.feedback_pais >= star ? "bg-orange-500 text-white" : "bg-gray-100 text-gray-300"
+                    )}
+                  >
+                    <Star className="w-6 h-6 fill-current" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <label className="text-xs font-black uppercase tracking-widest text-secondary/40">Observações e Feedback Detalhado</label>
+            <textarea 
+              value={evalData.observacoes}
+              onChange={(e) => setEvalData({ ...evalData, observacoes: e.target.value })}
+              className="w-full p-6 bg-gray-50 border-none rounded-3xl focus:ring-2 focus:ring-primary/20 transition-all font-medium min-h-[150px]"
+              placeholder="Descreva os pontos fortes e áreas de melhoria..."
+            />
+          </div>
+
+          <div className="flex gap-4">
+            <button 
+              onClick={onClose}
+              className="flex-1 py-4 rounded-2xl font-black uppercase tracking-widest text-secondary/40 hover:bg-gray-100 transition-all"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex-1 bg-primary text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all disabled:opacity-50"
+            >
+              {isSaving ? 'Salvando...' : 'Salvar Avaliação'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 export const AdminArea = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [parents, setParents] = useState<{ value: string, label: string }[]>([]);
   const [tutors, setTutors] = useState<{ value: string, label: string }[]>([]);
+  const [selectedTutorForEval, setSelectedTutorForEval] = useState<any | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -633,6 +757,13 @@ export const AdminArea = () => {
       
       <main className="flex-1 p-12 overflow-y-auto">
         <AnimatePresence mode="wait">
+          {selectedTutorForEval && (
+            <TutorEvaluationModal 
+              tutor={selectedTutorForEval} 
+              onClose={() => setSelectedTutorForEval(null)}
+              onSave={() => {}} 
+            />
+          )}
           <Routes>
             <Route path="/" element={<AdminDashboard />} />
             <Route path="/pais" element={
@@ -746,6 +877,11 @@ export const AdminArea = () => {
                   { key: 'especialidade', label: 'Especialidade', type: 'text' },
                   { key: 'bio', label: 'Biografia/Experiência', type: 'text' },
                   { key: 'senha', label: 'Senha (Manual)', type: 'text' },
+                  { key: 'nivel', label: 'Nível (Ex: Bronze, Prata, Ouro)', type: 'text' },
+                  { key: 'xp', label: 'XPs', type: 'number' },
+                  { key: 'badges', label: 'Badges (Separados por vírgula)', type: 'text' },
+                  { key: 'projeto_final_status', label: 'Status Projeto Final', type: 'select', options: ['pendente', 'aprovado', 'reprovado'] },
+                  { key: 'projeto_final_feedback', label: 'Feedback Projeto Final', type: 'text' },
                   { key: 'status', label: 'Status', type: 'select', options: ['ativo', 'pendente', 'inativo'] }
                 ]}
                 extraActions={(tutor, reload) => {
@@ -779,13 +915,22 @@ export const AdminArea = () => {
                   };
 
                   return (
-                    <button 
-                      onClick={handleInvite}
-                      title="Enviar Convite (Gerar Senha)"
-                      className="p-2 text-secondary/20 hover:text-success hover:bg-success/10 rounded-lg transition-all"
-                    >
-                      <Mail className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={handleInvite}
+                        title="Enviar Convite (Gerar Senha)"
+                        className="p-2 text-secondary/20 hover:text-success hover:bg-success/10 rounded-lg transition-all"
+                      >
+                        <Mail className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => setSelectedTutorForEval(tutor)}
+                        title="Avaliação e Desempenho"
+                        className="p-2 text-secondary/20 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+                      >
+                        <Star className="w-4 h-4" />
+                      </button>
+                    </div>
                   );
                 }}
               />
