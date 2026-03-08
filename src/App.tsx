@@ -2298,6 +2298,11 @@ const AlunosPaisPage = () => {
   const [familyData, setFamilyData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeChildId, setActiveChildId] = useState<string | null>(null);
+  const [childMetrics, setChildMetrics] = useState<any>(null);
+  const [childFeedback, setChildFeedback] = useState<any[]>([]);
+  const [loopConfig, setLoopConfig] = useState<any>(null);
+  const [isSubmittingReflection, setIsSubmittingReflection] = useState(false);
+  const [reflection, setReflection] = useState({ engajamento: 5, comentario: '' });
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
@@ -2357,6 +2362,87 @@ const AlunosPaisPage = () => {
     if (childProfiles) setProfiles(childProfiles);
     
     return family;
+  };
+
+  useEffect(() => {
+    if (activeChildId) {
+      fetchChildData(activeChildId);
+    }
+  }, [activeChildId]);
+
+  const fetchChildData = async (childId: string) => {
+    // 1. Buscar métricas mais recentes
+    const { data: metrics } = await supabase
+      .from('metricas_progresso')
+      .select('*')
+      .eq('aluno_id', childId)
+      .order('data_avaliacao', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (metrics) {
+      // Transformar N0-N4 em porcentagem (N4 = 100%, N3 = 75%, etc)
+      const transform = (val: number) => (val / 4) * 100;
+      setChildMetrics([
+        { subject: 'Oralidade', A: transform(metrics.oralidade), fullMark: 100 },
+        { subject: 'Escrita', A: transform(metrics.escrita), fullMark: 100 },
+        { subject: 'Compreensão', A: transform(metrics.compreensao), fullMark: 100 },
+        { subject: 'Cultura', A: transform(metrics.cultura), fullMark: 100 },
+      ]);
+    } else {
+      setChildMetrics([
+        { subject: 'Oralidade', A: 0, fullMark: 100 },
+        { subject: 'Escrita', A: 0, fullMark: 100 },
+        { subject: 'Compreensão', A: 0, fullMark: 100 },
+        { subject: 'Cultura', A: 0, fullMark: 100 },
+      ]);
+    }
+
+    // 2. Buscar feedbacks
+    const { data: feedbacks } = await supabase
+      .from('feedbacks_pedagogicos')
+      .select('*')
+      .eq('aluno_id', childId)
+      .order('created_at', { ascending: false });
+    
+    if (feedbacks) setChildFeedback(feedbacks);
+
+    // 3. Buscar config do loop semanal
+    const { data: config } = await supabase
+      .from('loop_semanal_config')
+      .select('*')
+      .eq('aluno_id', childId)
+      .order('semana_inicio', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (config) setLoopConfig(config);
+  };
+
+  const handleSaveReflection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeChildId) return;
+
+    setIsSubmittingReflection(true);
+    try {
+      const { error } = await supabase
+        .from('reflexoes_familia')
+        .insert([{
+          aluno_id: activeChildId,
+          familia_id: user.id,
+          nivel_engajamento: reflection.engajamento,
+          comentario: reflection.comentario
+        }]);
+
+      if (error) throw error;
+      alert('Reflexão enviada com sucesso! Obrigado por participar.');
+      setReflection({ engajamento: 5, comentario: '' });
+    } catch (err) {
+      console.error('Error saving reflection:', err);
+      alert('Erro ao enviar reflexão.');
+    } finally {
+      setIsSubmittingReflection(false);
+    }
   };
 
   const handleLogin = async (data: any) => {
@@ -2940,15 +3026,15 @@ const AlunosPaisPage = () => {
                 
                 <div className="h-[400px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={PARENT_STATS}>
+                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={childMetrics || PARENT_STATS}>
                       <PolarGrid stroke="#E5E7EB" />
                       <PolarAngleAxis dataKey="subject" tick={{ fill: '#232b4e', fontSize: 12, fontWeight: 900 }} />
                       <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                       <Radar
                         name="Progresso"
                         dataKey="A"
-                        stroke="#3498db"
-                        fill="#3498db"
+                        stroke="#76c06b"
+                        fill="#76c06b"
                         fillOpacity={0.5}
                       />
                     </RadarChart>
@@ -2956,40 +3042,157 @@ const AlunosPaisPage = () => {
                 </div>
               </div>
 
-              {/* Mission Center & Feedback */}
+              {/* Weekly Loop Timeline */}
+              <div className="lg:col-span-3 bg-white rounded-[40px] p-8 md:p-12 border border-gray-100 shadow-sm">
+                <div className="flex items-center gap-4 mb-10">
+                  <div className="w-12 h-12 bg-secondary/10 rounded-2xl flex items-center justify-center text-secondary">
+                    <Calendar className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-secondary tracking-tight">Loop Semanal</h3>
+                    <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Acompanhe o desbloqueio da trilha</p>
+                  </div>
+                </div>
+
+                <div className="space-y-8 relative">
+                  <div className="absolute left-6 top-0 bottom-0 w-1 bg-gray-100 -z-10" />
+                  
+                  {[
+                    { id: 'historia', label: 'História (Seg)', icon: BookOpen, unlocked: loopConfig?.historia_desbloqueada },
+                    { id: 'jogo', label: 'Jogo (Ter)', icon: Gamepad2, unlocked: loopConfig?.jogo_desbloqueado },
+                    { id: 'tarefa', label: 'Tarefa (Qua)', icon: Pencil, unlocked: loopConfig?.tarefa_desbloqueada },
+                    { id: 'missao', label: 'Missão (Sex)', icon: Target, unlocked: loopConfig?.missao_sexta_desbloqueada },
+                  ].map((step) => (
+                    <div key={step.id} className="flex items-center gap-6">
+                      <div className={cn(
+                        "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg",
+                        step.unlocked ? "bg-primary text-white" : "bg-white text-gray-200 border-2 border-gray-100"
+                      )}>
+                        <step.icon className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className={cn("font-black uppercase tracking-widest text-xs", step.unlocked ? "text-secondary" : "text-gray-300")}>
+                          {step.label}
+                        </h4>
+                        <p className="text-[10px] font-bold text-secondary/40">
+                          {step.unlocked ? "Desbloqueado pelo Tutor" : "Aguardando Tutor"}
+                        </p>
+                      </div>
+                      {step.unlocked && <CheckCircle2 className="w-5 h-5 text-success" />}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Feedback Reports */}
+              <div className="lg:col-span-2 space-y-8">
+                <div className="bg-gray-50 rounded-[40px] p-8 md:p-12">
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+                      <MessageSquare className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-secondary tracking-tight">Relatórios do Tutor</h3>
+                      <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Feedback pedagógico qualitativo</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    {childFeedback.map((fb) => (
+                      <div key={fb.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+                            {new Date(fb.created_at).toLocaleDateString('pt-BR')}
+                          </span>
+                          <Quote className="w-4 h-4 text-primary/20" />
+                        </div>
+                        <p className="text-sm text-secondary/70 font-medium leading-relaxed italic">"{fb.conteudo}"</p>
+                        <div className="pt-4 border-t border-gray-50">
+                          <p className="text-[10px] font-black text-secondary/40 uppercase tracking-widest mb-2">Orientação para você:</p>
+                          <p className="text-xs text-secondary/60 font-bold">{fb.orientacao_familia}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {childFeedback.length === 0 && (
+                      <div className="text-center py-10">
+                        <p className="text-secondary/40 font-bold uppercase tracking-widest text-xs">Nenhum feedback ainda</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Mission Center & Reflection */}
               <div className="space-y-8">
                 {/* Friday Mission Card */}
                 <div className="bg-primary text-white rounded-[40px] p-8 shadow-xl shadow-primary/20 relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-10">
                     <Package className="w-32 h-32" />
                   </div>
-                  <h4 className="text-xs font-black uppercase tracking-widest mb-4 opacity-80">Roteiro da Sexta-feira</h4>
-                  <h3 className="text-2xl font-black mb-6 leading-tight">Missão Offline: O Mestre da Cozinha</h3>
+                  <h4 className="text-xs font-black uppercase tracking-widest mb-4 opacity-80">Missão de Sexta-feira</h4>
+                  <h3 className="text-2xl font-black mb-6 leading-tight">Mão na Massa!</h3>
                   <p className="text-white/80 font-medium mb-8">
-                    "Peça para seu filho nomear 5 objetos na cozinha enquanto preparam algo juntos."
+                    As missões culturais são enviadas pelo tutor para serem realizadas em família. Verifique se há uma nova missão desbloqueada!
                   </p>
                   
-                  <div className="space-y-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Como foi a atividade?</p>
-                    <div className="grid grid-cols-1 gap-2">
-                      <button className="w-full py-3 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-black uppercase transition-colors">Conseguiu Sozinho</button>
-                      <button className="w-full py-3 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-black uppercase transition-colors">Precisou de Ajuda</button>
-                      <button className="w-full py-3 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-black uppercase transition-colors">Não quis fazer</button>
+                  {loopConfig?.missao_sexta_desbloqueada ? (
+                    <div className="bg-white/10 p-6 rounded-3xl border border-white/20">
+                      <p className="text-sm font-black mb-4">✨ Missão Ativa!</p>
+                      <p className="text-xs font-medium opacity-90">Realize a atividade cultural proposta e envie sua reflexão abaixo.</p>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="bg-black/10 p-6 rounded-3xl border border-white/5 flex items-center gap-3">
+                      <Lock className="w-5 h-5 opacity-40" />
+                      <p className="text-xs font-bold opacity-40 uppercase tracking-widest">Aguardando desbloqueio</p>
+                    </div>
+                  )}
                 </div>
 
-                {/* Quick Tips */}
-                <div className="bg-secondary text-white rounded-[40px] p-8">
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                      <Heart className="w-5 h-5 text-primary" />
+                {/* Reflection Form */}
+                <div className="bg-white rounded-[40px] p-8 border border-gray-100 shadow-sm space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-success/10 rounded-xl flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-success" />
                     </div>
-                    <h4 className="font-black uppercase tracking-widest text-xs">Dica da Semana</h4>
+                    <h4 className="font-black uppercase tracking-widest text-xs text-secondary">Reflexão do Responsável</h4>
                   </div>
-                  <p className="text-white/70 text-sm font-medium leading-relaxed">
-                    O bilinguismo de herança é fortalecido pelo afeto. Tente ler o livro da semana antes de dormir!
-                  </p>
+                  
+                  <form onSubmit={handleSaveReflection} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-2">Nível de Engajamento (1-5)</label>
+                      <div className="flex gap-2">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setReflection({ ...reflection, engajamento: n })}
+                            className={cn(
+                              "flex-1 py-2 rounded-xl font-black text-xs transition-all",
+                              reflection.engajamento === n ? "bg-success text-white" : "bg-gray-50 text-secondary/20"
+                            )}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-2">Comentário Breve</label>
+                      <textarea 
+                        value={reflection.comentario}
+                        onChange={(e) => setReflection({ ...reflection, comentario: e.target.value })}
+                        className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-success/20 transition-all font-medium text-sm h-24"
+                        placeholder="Como foi a experiência?"
+                      />
+                    </div>
+                    <button 
+                      type="submit"
+                      disabled={isSubmittingReflection || !loopConfig?.missao_sexta_desbloqueada}
+                      className="w-full py-4 bg-success text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-success/20 hover:scale-[1.02] transition-all disabled:opacity-50"
+                    >
+                      {isSubmittingReflection ? 'Enviando...' : 'Enviar Reflexão'}
+                    </button>
+                  </form>
                 </div>
               </div>
             </div>
@@ -3014,6 +3217,17 @@ const TutoresPage = () => {
   const [tutorData, setTutorData] = useState<any>(null);
   const [showRegister, setShowRegister] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [tutorStudents, setTutorStudents] = useState<any[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [isSavingMetrics, setIsSavingMetrics] = useState(false);
+  const [metrics, setMetrics] = useState({
+    oralidade: 0,
+    compreensao: 0,
+    escrita: 0,
+    cultura: 0,
+    feedback: '',
+    orientacao: ''
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -3021,10 +3235,80 @@ const TutoresPage = () => {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
 
+  useEffect(() => {
+    if (isLoggedIn && tutorData) {
+      fetchTutorStudents();
+    }
+  }, [isLoggedIn, tutorData]);
+
+  const fetchTutorStudents = async () => {
+    const { data, error } = await supabase
+      .from('alunos')
+      .select('*, pais(*)')
+      .eq('tutor_id', tutorData.id);
+    
+    if (data) setTutorStudents(data);
+  };
+
+  const handleSaveWeeklyClosing = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudent) return;
+
+    setIsSavingMetrics(true);
+    try {
+      // 1. Salvar métricas N0-N4
+      const { error: mError } = await supabase
+        .from('metricas_progresso')
+        .insert([{
+          aluno_id: selectedStudent.id,
+          tutor_id: tutorData.id,
+          oralidade: metrics.oralidade,
+          compreensao: metrics.compreensao,
+          escrita: metrics.escrita,
+          cultura: metrics.cultura
+        }]);
+
+      if (mError) throw mError;
+
+      // 2. Salvar feedback qualitativo
+      const { error: fError } = await supabase
+        .from('feedbacks_pedagogicos')
+        .insert([{
+          aluno_id: selectedStudent.id,
+          tutor_id: tutorData.id,
+          conteudo: metrics.feedback,
+          orientacao_familia: metrics.orientacao
+        }]);
+
+      if (fError) throw fError;
+
+      // 3. Desbloquear loop semanal (exemplo: desbloqueia tudo para a semana atual)
+      const today = new Date().toISOString().split('T')[0];
+      const { error: lError } = await supabase
+        .from('loop_semanal_config')
+        .upsert({
+          aluno_id: selectedStudent.id,
+          semana_inicio: today,
+          historia_desbloqueada: true,
+          jogo_desbloqueado: true,
+          tarefa_desbloqueada: true,
+          missao_sexta_desbloqueada: true
+        }, { onConflict: 'aluno_id, semana_inicio' });
+
+      alert('Fechamento de semana salvo com sucesso! A família foi notificada.');
+      setSelectedStudent(null);
+      setMetrics({ oralidade: 0, compreensao: 0, escrita: 0, cultura: 0, feedback: '', orientacao: '' });
+    } catch (err) {
+      console.error('Error saving weekly closing:', err);
+      alert('Erro ao salvar fechamento. Verifique se as tabelas SQL foram criadas.');
+    } finally {
+      setIsSavingMetrics(false);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
-
     try {
       const { data: tutor, error } = await supabase
         .from('tutores')
@@ -3269,6 +3553,7 @@ const TutoresPage = () => {
 
         <nav className="flex-1 space-y-2">
           <SidebarItem id="dashboard" icon={LayoutDashboard} label="🏠 Início" />
+          <SidebarItem id="alunos" icon={Users} label="👥 Meus Alunos" />
           <SidebarItem id="trilha" icon={BookOpen} label="🎓 Certificação" />
           <SidebarItem id="mala-rosa" icon={ShoppingBag} label="🎒 Mala Rosa" />
           <SidebarItem id="comunidade" icon={Coffee} label="🤝 Comunidade" />
@@ -3287,6 +3572,171 @@ const TutoresPage = () => {
       {/* Main Content */}
       <main className="flex-1 p-8 md:p-12 overflow-y-auto max-h-screen">
         <AnimatePresence mode="wait">
+          {activeTab === 'alunos' && (
+            <motion.div 
+              key="alunos"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-8"
+            >
+              <div className="flex justify-between items-center">
+                <h2 className="text-4xl font-black text-secondary">Meus Alunos</h2>
+                <div className="bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100 flex items-center gap-2">
+                  <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Total:</span>
+                  <span className="font-black text-secondary">{tutorStudents.length}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Student List */}
+                <div className="lg:col-span-4 space-y-4">
+                  {tutorStudents.map((student) => (
+                    <button 
+                      key={student.id}
+                      onClick={() => setSelectedStudent(student)}
+                      className={cn(
+                        "w-full p-6 rounded-3xl border transition-all flex items-center gap-4 text-left group",
+                        selectedStudent?.id === student.id ? "bg-white border-primary shadow-lg" : "bg-white border-gray-100 hover:border-primary/50"
+                      )}
+                    >
+                      <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-2xl">
+                        {student.avatar || '👶'}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-black text-secondary">{student.name}</h4>
+                        <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">{student.nivel}</p>
+                      </div>
+                      <ChevronRight className={cn("w-5 h-5 transition-all", selectedStudent?.id === student.id ? "text-primary translate-x-1" : "text-gray-200")} />
+                    </button>
+                  ))}
+                  {tutorStudents.length === 0 && (
+                    <div className="p-12 text-center bg-white rounded-3xl border border-dashed border-gray-200">
+                      <Users className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                      <p className="text-secondary/40 font-bold uppercase tracking-widest text-xs">Nenhum aluno vinculado</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Weekly Closing Form */}
+                <div className="lg:col-span-8">
+                  {selectedStudent ? (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="bg-white p-10 rounded-[40px] shadow-xl border border-gray-50 space-y-10"
+                    >
+                      <div className="flex items-center gap-6 pb-8 border-b border-gray-50">
+                        <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-4xl">
+                          {selectedStudent.avatar || '👶'}
+                        </div>
+                        <div>
+                          <h3 className="text-3xl font-black text-secondary">Fechamento de Semana</h3>
+                          <p className="text-secondary/60 font-medium">Acompanhamento para {selectedStudent.name}</p>
+                        </div>
+                      </div>
+
+                      <form onSubmit={handleSaveWeeklyClosing} className="space-y-10">
+                        {/* Metrics N0-N4 */}
+                        <div className="space-y-6">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                            <BarChart3 className="w-4 h-4" /> Métricas de Aprendizado (N0 a N4)
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {[
+                              { id: 'oralidade', label: 'Oralidade' },
+                              { id: 'compreensao', label: 'Compreensão' },
+                              { id: 'escrita', label: 'Escrita' },
+                              { id: 'cultura', label: 'Cultura' }
+                            ].map((axis) => (
+                              <div key={axis.id} className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                  <label className="font-bold text-secondary">{axis.label}</label>
+                                  <span className="text-primary font-black">N{(metrics as any)[axis.id]}</span>
+                                </div>
+                                <div className="flex gap-2">
+                                  {[0, 1, 2, 3, 4].map((n) => (
+                                    <button
+                                      key={n}
+                                      type="button"
+                                      onClick={() => setMetrics({ ...metrics, [axis.id]: n })}
+                                      className={cn(
+                                        "flex-1 py-3 rounded-xl font-black text-xs transition-all",
+                                        (metrics as any)[axis.id] === n 
+                                          ? "bg-primary text-white shadow-lg shadow-primary/20" 
+                                          : "bg-gray-50 text-secondary/40 hover:bg-gray-100"
+                                      )}
+                                    >
+                                      N{n}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Qualitative Feedback */}
+                        <div className="space-y-6">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-secondary flex items-center gap-2">
+                            <MessageSquare className="w-4 h-4" /> Feedback para a Família
+                          </h4>
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-4">Relatório Qualitativo</label>
+                              <textarea 
+                                value={metrics.feedback}
+                                onChange={(e) => setMetrics({ ...metrics, feedback: e.target.value })}
+                                className="w-full p-6 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-medium h-32"
+                                placeholder="Como foi o desempenho do aluno nesta semana?"
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-4">Orientação para a Família (Co-professora)</label>
+                              <textarea 
+                                value={metrics.orientacao}
+                                onChange={(e) => setMetrics({ ...metrics, orientacao: e.target.value })}
+                                className="w-full p-6 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-medium h-32"
+                                placeholder="Dicas para os pais reforçarem o aprendizado em casa."
+                                required
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-8 border-t border-gray-50 flex justify-end gap-4">
+                          <button 
+                            type="button"
+                            onClick={() => setSelectedStudent(null)}
+                            className="px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs text-secondary/40 hover:bg-gray-50 transition-all"
+                          >
+                            Cancelar
+                          </button>
+                          <button 
+                            type="submit"
+                            disabled={isSavingMetrics}
+                            className="px-12 py-5 bg-primary text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all disabled:opacity-50"
+                          >
+                            {isSavingMetrics ? 'Salvando...' : 'Finalizar Semana'}
+                          </button>
+                        </div>
+                      </form>
+                    </motion.div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-20 bg-white rounded-[40px] border-2 border-dashed border-gray-100">
+                      <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center text-secondary/10 mb-8">
+                        <Users className="w-12 h-12" />
+                      </div>
+                      <h3 className="text-2xl font-black text-secondary">Selecione um aluno</h3>
+                      <p className="text-secondary/40 font-medium max-w-xs mx-auto mt-2">Escolha um aluno na lista ao lado para realizar o fechamento pedagógico da semana.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === 'dashboard' && (
             <motion.div 
               key="dashboard"
