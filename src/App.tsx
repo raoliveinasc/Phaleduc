@@ -1682,6 +1682,21 @@ const WEEKLY_STATIONS = [
   { day: "Sexta", label: "Missão", icon: Package, color: "bg-danger", desc: "Missão Offline", special: true },
 ];
 
+const FAUNA_BRASILEIRA = [
+  { id: 'onca', name: 'Onça-pintada', icon: '🐆' },
+  { id: 'arara', name: 'Arara-azul', icon: '🦜' },
+  { id: 'mico', name: 'Mico-leão-dourado', icon: '🐒' },
+  { id: 'tuiuiu', name: 'Tuiuiú', icon: '🦢' },
+  { id: 'boto', name: 'Boto-cor-de-rosa', icon: '🐬' },
+  { id: 'tamandua', name: 'Tamanduá-bandeira', icon: '🐜' },
+  { id: 'lobo', name: 'Lobo-guará', icon: '🦊' },
+  { id: 'jacare', name: 'Jacaré-açu', icon: '🐊' },
+  { id: 'capivara', name: 'Capivara', icon: '🐹' },
+  { id: 'tucano', name: 'Tucano', icon: '🐦' },
+  { id: 'preguica', name: 'Bicho-preguiça', icon: '🦥' },
+  { id: 'tatu', name: 'Tatu-bola', icon: '🦔' }
+];
+
 const BADGES = [
   { id: 1, name: "Pão de Queijo", icon: "🧀", desc: "Cultura Mineira" },
   { id: 2, name: "Arara Azul", icon: "🦜", desc: "Fauna Brasileira" },
@@ -2158,13 +2173,18 @@ const ProfileSelectionView = ({
   profiles, 
   onSelectProfile, 
   onParentAccess, 
-  onLogout 
+  onLogout,
+  onUpdateAvatar
 }: { 
   profiles: any[], 
   onSelectProfile: (p: any) => void, 
   onParentAccess: () => void,
-  onLogout: () => void
+  onLogout: () => void,
+  onUpdateAvatar: (profileId: string, avatar: string) => Promise<void>
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [selectedProfileForAvatar, setSelectedProfileForAvatar] = useState<any>(null);
+
   const profileColors = [
     'bg-blue-500',
     'bg-red-500',
@@ -2175,6 +2195,21 @@ const ProfileSelectionView = ({
     'bg-indigo-500'
   ];
 
+  const handleProfileClick = (profile: any) => {
+    if (isEditing) {
+      setSelectedProfileForAvatar(profile);
+    } else {
+      onSelectProfile(profile);
+    }
+  };
+
+  const handleAvatarSelect = async (icon: string) => {
+    if (selectedProfileForAvatar) {
+      await onUpdateAvatar(selectedProfileForAvatar.id, icon);
+      setSelectedProfileForAvatar(null);
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -2182,45 +2217,109 @@ const ProfileSelectionView = ({
       exit={{ opacity: 0, scale: 0.95 }}
       className="bg-[#141414] flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)]"
     >
-      <h1 className="text-3xl md:text-5xl font-medium text-white mb-12 text-center tracking-tight">Quem está aprendendo hoje?</h1>
+      <h1 className="text-3xl md:text-5xl font-medium text-white mb-12 text-center tracking-tight">
+        {isEditing ? 'Gerenciar Perfis' : 'Quem está aprendendo hoje?'}
+      </h1>
       
       <div className="flex flex-wrap justify-center gap-6 md:gap-10 mb-20">
         {profiles.map((profile, index) => (
           <button 
             key={profile.id}
-            onClick={() => onSelectProfile(profile)}
-            className="group flex flex-col items-center gap-4"
+            onClick={() => handleProfileClick(profile)}
+            className="group flex flex-col items-center gap-4 relative"
           >
             <div className={cn(
               "w-28 h-28 md:w-36 md:h-36 rounded-md flex items-center justify-center text-5xl md:text-6xl transition-all duration-200 group-hover:ring-4 group-hover:ring-white group-hover:scale-105 relative overflow-hidden shadow-lg",
               profile.avatar ? "bg-white/10" : profileColors[index % profileColors.length]
             )}>
               {profile.avatar || profile.name?.[0]?.toUpperCase() || '👶'}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+              <div className={cn(
+                "absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center",
+                isEditing && "bg-black/40"
+              )}>
+                {isEditing && <Pencil className="w-8 h-8 text-white" />}
+              </div>
             </div>
             <span className="text-lg md:text-xl font-medium text-gray-400 group-hover:text-white transition-colors">{profile.name}</span>
           </button>
         ))}
         
-        <button 
-          onClick={onParentAccess}
-          className="group flex flex-col items-center gap-4"
-        >
-          <div className="w-28 h-28 md:w-36 md:h-36 rounded-md bg-white/5 flex items-center justify-center text-gray-500 transition-all duration-200 group-hover:ring-4 group-hover:ring-white group-hover:scale-105">
-            <Lock className="w-10 h-10" />
-          </div>
-          <span className="text-lg md:text-xl font-medium text-gray-500 group-hover:text-white transition-colors">Modo Família</span>
-        </button>
+        {!isEditing && (
+          <button 
+            onClick={onParentAccess}
+            className="group flex flex-col items-center gap-4"
+          >
+            <div className="w-28 h-28 md:w-36 md:h-36 rounded-md bg-white/5 flex items-center justify-center text-gray-500 transition-all duration-200 group-hover:ring-4 group-hover:ring-white group-hover:scale-105">
+              <Lock className="w-10 h-10" />
+            </div>
+            <span className="text-lg md:text-xl font-medium text-gray-500 group-hover:text-white transition-colors">Modo Família</span>
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-8">
         <button 
-          onClick={onLogout}
+          onClick={() => setIsEditing(!isEditing)}
           className="px-8 py-2 border border-gray-600 text-gray-500 font-medium tracking-widest uppercase text-xs hover:text-white hover:border-white transition-all"
         >
-          Gerenciar Perfis • Sair
+          {isEditing ? 'Concluído' : 'Gerenciar Perfis'}
         </button>
+        {!isEditing && (
+          <button 
+            onClick={onLogout}
+            className="text-gray-600 font-medium tracking-widest uppercase text-[10px] hover:text-white transition-all"
+          >
+            Trocar de Conta • Sair
+          </button>
+        )}
       </div>
+
+      {/* Avatar Selection Modal */}
+      <AnimatePresence>
+        {selectedProfileForAvatar && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-[#181818] rounded-2xl p-8 md:p-12 max-w-4xl w-full border border-white/10"
+            >
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h3 className="text-3xl font-medium text-white tracking-tight">Escolha seu Avatar</h3>
+                  <p className="text-gray-400 font-medium mt-1">Animais da Fauna Brasileira</p>
+                </div>
+                <button 
+                  onClick={() => setSelectedProfileForAvatar(null)}
+                  className="p-2 text-gray-400 hover:text-white transition-colors"
+                >
+                  <X className="w-8 h-8" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6">
+                {FAUNA_BRASILEIRA.map((animal) => (
+                  <button
+                    key={animal.id}
+                    onClick={() => handleAvatarSelect(animal.icon)}
+                    className="group flex flex-col items-center gap-3"
+                  >
+                    <div className="w-20 h-20 md:w-24 md:h-24 rounded-md bg-white/5 flex items-center justify-center text-4xl md:text-5xl transition-all group-hover:ring-4 group-hover:ring-white group-hover:scale-105">
+                      {animal.icon}
+                    </div>
+                    <span className="text-[10px] md:text-xs font-medium text-gray-500 group-hover:text-white text-center">{animal.name}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
@@ -2597,6 +2696,28 @@ const AlunosPaisPage = () => {
     setView('login');
   };
 
+  const handleUpdateAvatar = async (profileId: string, avatar: string) => {
+    try {
+      const { error } = await supabase
+        .from('alunos')
+        .update({ avatar })
+        .eq('id', profileId);
+
+      if (error) throw error;
+
+      // Update local state
+      setProfiles(profiles.map(p => p.id === profileId ? { ...p, avatar } : p));
+      
+      // If the selected child is the one being updated, update it too
+      if (selectedChild?.id === profileId) {
+        setSelectedChild({ ...selectedChild, avatar });
+      }
+    } catch (err) {
+      console.error('Error updating avatar:', err);
+      alert('Erro ao atualizar avatar.');
+    }
+  };
+
   const handleProfileSelect = (profile: any) => {
     setSelectedChild(profile);
     setView('child');
@@ -2761,6 +2882,7 @@ const AlunosPaisPage = () => {
             onSelectProfile={handleProfileSelect}
             onParentAccess={() => setPinModalOpen(true)}
             onLogout={handleLogout}
+            onUpdateAvatar={handleUpdateAvatar}
           />
         )}
 
