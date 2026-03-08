@@ -1669,11 +1669,6 @@ const GamesPlatform = () => (
 
 // --- Mundo Phaleduc (Alunos & Pais) ---
 
-const CHILDREN_PROFILES = [
-  { id: 1, name: "Léo", age: 6, avatar: "🦁", ageGroup: "5-7" },
-  { id: 2, name: "Bia", age: 10, avatar: "🦋", ageGroup: "8-13" },
-];
-
 const WEEKLY_STATIONS = [
   { day: "Segunda", label: "Input", icon: BookOpen, color: "bg-primary", desc: "Livro/Vídeo" },
   { day: "Terça", label: "Prática", icon: Gamepad2, color: "bg-success", desc: "Game de Vocabulário" },
@@ -2232,7 +2227,7 @@ const ProfileSelectionView = ({
               "w-28 h-28 md:w-36 md:h-36 rounded-md flex items-center justify-center text-5xl md:text-6xl transition-all duration-200 group-hover:ring-4 group-hover:ring-white group-hover:scale-105 relative overflow-hidden shadow-lg",
               profile.avatar ? "bg-white/10" : profileColors[index % profileColors.length]
             )}>
-              {profile.avatar || profile.name?.[0]?.toUpperCase() || '👶'}
+              {profile.avatar || profile.nome?.[0]?.toUpperCase() || '👶'}
               <div className={cn(
                 "absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center",
                 isEditing && "bg-black/40"
@@ -2240,7 +2235,7 @@ const ProfileSelectionView = ({
                 {isEditing && <Pencil className="w-8 h-8 text-white" />}
               </div>
             </div>
-            <span className="text-lg md:text-xl font-medium text-gray-400 group-hover:text-white transition-colors">{profile.name}</span>
+            <span className="text-lg md:text-xl font-medium text-gray-400 group-hover:text-white transition-colors">{profile.nome}</span>
           </button>
         ))}
         
@@ -2902,7 +2897,7 @@ const AlunosPaisPage = () => {
                 </div>
                 <div>
                   <h3 className="font-black text-secondary uppercase tracking-tighter text-sm">Mochila Cultural</h3>
-                  <p className="text-[10px] text-secondary/40 font-black uppercase tracking-widest">Coleção de {selectedChild.name}</p>
+                  <p className="text-[10px] text-secondary/40 font-black uppercase tracking-widest">Coleção de {selectedChild.nome}</p>
                 </div>
               </div>
 
@@ -2936,7 +2931,7 @@ const AlunosPaisPage = () => {
                     {selectedChild.avatar}
                   </div>
                   <div>
-                    <h2 className="text-4xl md:text-5xl font-black text-secondary tracking-tighter">Olá, {selectedChild.name}!</h2>
+                    <h2 className="text-4xl md:text-5xl font-black text-secondary tracking-tighter">Olá, {selectedChild.nome}!</h2>
                     <p className="text-lg text-secondary/50 font-medium">Pronto para a aventura de hoje?</p>
                   </div>
                 </div>
@@ -3132,7 +3127,7 @@ const AlunosPaisPage = () => {
                         {child.avatar || '👶'}
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-black text-secondary">{child.name}</h4>
+                        <h4 className="font-black text-secondary">{child.nome}</h4>
                         <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">{child.nivel || 'Nível não definido'}</p>
                         <div className="mt-2 flex items-center gap-2">
                           <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Código:</span>
@@ -3151,7 +3146,7 @@ const AlunosPaisPage = () => {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-12">
                   <div>
                     <h3 className="text-2xl font-black text-secondary tracking-tight">
-                      Desenvolvimento: {profiles.find(c => c.id === activeChildId)?.name || 'Carregando...'}
+                      Desenvolvimento: {profiles.find(c => c.id === activeChildId)?.nome || 'Carregando...'}
                     </h3>
                     <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Análise de competências linguísticas</p>
                   </div>
@@ -3743,7 +3738,7 @@ const TutoresPage = () => {
                         {student.avatar || '👶'}
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-black text-secondary">{student.name}</h4>
+                        <h4 className="font-black text-secondary">{student.nome}</h4>
                         <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">{student.nivel}</p>
                       </div>
                       <ChevronRight className={cn("w-5 h-5 transition-all", selectedStudent?.id === student.id ? "text-primary translate-x-1" : "text-gray-200")} />
@@ -3771,7 +3766,7 @@ const TutoresPage = () => {
                         </div>
                         <div>
                           <h3 className="text-3xl font-black text-secondary">Fechamento de Semana</h3>
-                          <p className="text-secondary/60 font-medium">Acompanhamento para {selectedStudent.name}</p>
+                          <p className="text-secondary/60 font-medium">Acompanhamento para {selectedStudent.nome}</p>
                         </div>
                       </div>
 
