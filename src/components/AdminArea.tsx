@@ -745,6 +745,7 @@ export const AdminArea = () => {
                   { key: 'telefone', label: 'Telefone', type: 'tel' },
                   { key: 'especialidade', label: 'Especialidade', type: 'text' },
                   { key: 'bio', label: 'Biografia/Experiência', type: 'text' },
+                  { key: 'senha', label: 'Senha (Manual)', type: 'text' },
                   { key: 'status', label: 'Status', type: 'select', options: ['ativo', 'pendente', 'inativo'] }
                 ]}
                 extraActions={(tutor, reload) => {

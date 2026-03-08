@@ -3364,6 +3364,7 @@ const TutoresPage = () => {
   });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
@@ -3462,14 +3463,17 @@ const TutoresPage = () => {
       }
 
       // Validate password
+      const trimmedPassword = password.trim();
+
       // 1. Check permanent password first
-      if (tutor.senha && tutor.senha === password) {
+      if (tutor.senha && tutor.senha === trimmedPassword) {
         setTutorData(tutor);
         setIsLoggedIn(true);
         setMustCreatePassword(false);
       } 
       // 2. Check temporary password if no permanent password or if it matches
-      else if (tutor.senha_temporaria && tutor.senha_temporaria === password) {
+      // Note: Temporary passwords are generated as uppercase, so we check case-insensitively
+      else if (tutor.senha_temporaria && tutor.senha_temporaria.toUpperCase() === trimmedPassword.toUpperCase()) {
         setTutorData(tutor);
         setIsLoggedIn(true);
         setMustCreatePassword(true); // Force password creation
@@ -3568,14 +3572,23 @@ const TutoresPage = () => {
             </div>
             <div className="space-y-2">
               <label className="text-xs font-black uppercase tracking-widest text-secondary/40 ml-4">Senha</label>
-              <input 
-                type="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-secondary/20 transition-all font-medium"
-                placeholder="••••••••"
-                required
-              />
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-secondary/20 transition-all font-medium pr-14"
+                  placeholder="••••••••"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-secondary/30 hover:text-secondary transition-colors"
+                >
+                  {showPassword ? <X className="w-5 h-5" /> : <Play className="w-5 h-5 rotate-90" />}
+                </button>
+              </div>
             </div>
             <button 
               type="submit"

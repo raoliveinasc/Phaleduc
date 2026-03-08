@@ -35,6 +35,7 @@ interface TutorFormData {
   telefone: string;
   especialidade: string;
   bio: string;
+  senha?: string;
 }
 
 // --- Components ---
@@ -268,7 +269,8 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
     email: '',
     telefone: '',
     especialidade: 'Alfabetização',
-    bio: ''
+    bio: '',
+    senha: ''
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -284,6 +286,7 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
           telefone: formData.telefone,
           especialidade: formData.especialidade,
           bio: formData.bio,
+          senha: formData.senha,
           status: 'pendente' // New tutors start as pending review
         });
 
@@ -365,6 +368,18 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
             value={formData.bio}
             onChange={(e) => setFormData({...formData, bio: e.target.value})}
           />
+          <div className="relative">
+            <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary/30 w-5 h-5" />
+            <input 
+              type="password" 
+              placeholder="Crie uma Senha de Acesso" 
+              required
+              minLength={6}
+              className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold transition-all"
+              value={formData.senha}
+              onChange={(e) => setFormData({...formData, senha: e.target.value})}
+            />
+          </div>
         </div>
 
         <button 
