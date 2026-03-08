@@ -9,7 +9,8 @@ import {
   Calendar, 
   GraduationCap, 
   ArrowRight,
-  Loader2
+  Loader2,
+  Lock
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
