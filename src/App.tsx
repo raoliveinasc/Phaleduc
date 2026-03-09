@@ -3174,6 +3174,24 @@ const AlunosPaisPage = () => {
                     </RadarChart>
                   </ResponsiveContainer>
                 </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8">
+                  {(childMetrics || []).map((metric: any) => (
+                    <div key={metric.subject} className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-secondary/40">{metric.subject}</span>
+                        <span className="text-[10px] font-black text-primary">N{Math.round((metric.A / 100) * 4)}</span>
+                      </div>
+                      <div className="h-2 bg-white rounded-full overflow-hidden border border-gray-100">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${metric.A}%` }}
+                          className="h-full bg-primary"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Weekly Loop Timeline */}
@@ -3270,9 +3288,14 @@ const AlunosPaisPage = () => {
                   </p>
                   
                   {loopConfig?.missao_sexta_desbloqueada ? (
-                    <div className="bg-white/10 p-6 rounded-3xl border border-white/20">
-                      <p className="text-sm font-black mb-4">✨ Missão Ativa!</p>
-                      <p className="text-xs font-medium opacity-90">Realize a atividade cultural proposta e envie sua reflexão abaixo.</p>
+                    <div className="bg-white/10 p-6 rounded-3xl border border-white/20 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-yellow-300" />
+                        <p className="text-sm font-black">✨ Missão Ativa: {loopConfig.missao_titulo || 'Mão na Massa!'}</p>
+                      </div>
+                      <p className="text-sm font-medium opacity-90 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/10">
+                        {loopConfig.missao_prompt || 'Realize a atividade cultural proposta e envie sua reflexão abaixo.'}
+                      </p>
                     </div>
                   ) : (
                     <div className="bg-black/10 p-6 rounded-3xl border border-white/5 flex items-center gap-3">
@@ -3353,6 +3376,8 @@ const TutoresPage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tutorStudents, setTutorStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [selectedStudentReports, setSelectedStudentReports] = useState<any[]>([]);
+  const [selectedStudentReflections, setSelectedStudentReflections] = useState<any[]>([]);
   const [isSavingMetrics, setIsSavingMetrics] = useState(false);
   const [metrics, setMetrics] = useState({
     oralidade: 0,
@@ -3360,7 +3385,13 @@ const TutoresPage = () => {
     escrita: 0,
     cultura: 0,
     feedback: '',
-    orientacao: ''
+    orientacao: '',
+    missaoTitulo: '',
+    missaoPrompt: '',
+    historiaDesbloqueada: true,
+    jogoDesbloqueado: true,
+    tarefaDesbloqueada: true,
+    missaoSextaDesbloqueada: true
   });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -3385,57 +3416,114 @@ const TutoresPage = () => {
     if (data) setTutorStudents(data);
   };
 
+  const getMonday = (d: Date) => {
+    const date = new Date(d);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(date.setDate(diff)).toISOString().split('T')[0];
+  };
+
+  const fetchStudentReports = async (studentId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('feedbacks_pedagogicos')
+        .select('*')
+        .eq('aluno_id', studentId)
+        .order('semana_inicio', { ascending: false });
+      
+      if (data) setSelectedStudentReports(data);
+
+      const { data: reflections, error: rError } = await supabase
+        .from('reflexoes_familia')
+        .select('*')
+        .eq('aluno_id', studentId)
+        .order('created_at', { ascending: false });
+
+      if (reflections) setSelectedStudentReflections(reflections);
+    } catch (err) {
+      console.error('Error fetching reports/reflections:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedStudent) {
+      fetchStudentReports(selectedStudent.id);
+    } else {
+      setSelectedStudentReports([]);
+    }
+  }, [selectedStudent]);
+
   const handleSaveWeeklyClosing = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudent) return;
 
     setIsSavingMetrics(true);
+    const semanaInicio = getMonday(new Date());
+
     try {
       // 1. Salvar métricas N0-N4
       const { error: mError } = await supabase
         .from('metricas_progresso')
-        .insert([{
+        .upsert({
           aluno_id: selectedStudent.id,
           tutor_id: tutorData.id,
+          semana_inicio: semanaInicio,
           oralidade: metrics.oralidade,
           compreensao: metrics.compreensao,
           escrita: metrics.escrita,
           cultura: metrics.cultura
-        }]);
+        }, { onConflict: 'aluno_id,semana_inicio' });
 
       if (mError) throw mError;
 
       // 2. Salvar feedback qualitativo
       const { error: fError } = await supabase
         .from('feedbacks_pedagogicos')
-        .insert([{
+        .upsert({
           aluno_id: selectedStudent.id,
           tutor_id: tutorData.id,
+          semana_inicio: semanaInicio,
           conteudo: metrics.feedback,
           orientacao_familia: metrics.orientacao
-        }]);
+        }, { onConflict: 'aluno_id,semana_inicio' });
 
       if (fError) throw fError;
 
-      // 3. Desbloquear loop semanal (exemplo: desbloqueia tudo para a semana atual)
-      const today = new Date().toISOString().split('T')[0];
+      // 3. Desbloquear loop semanal e configurar missão
       const { error: lError } = await supabase
         .from('loop_semanal_config')
         .upsert({
           aluno_id: selectedStudent.id,
-          semana_inicio: today,
-          historia_desbloqueada: true,
-          jogo_desbloqueado: true,
-          tarefa_desbloqueada: true,
-          missao_sexta_desbloqueada: true
-        }, { onConflict: 'aluno_id, semana_inicio' });
+          semana_inicio: semanaInicio,
+          historia_desbloqueada: metrics.historiaDesbloqueada,
+          jogo_desbloqueado: metrics.jogoDesbloqueado,
+          tarefa_desbloqueada: metrics.tarefaDesbloqueada,
+          missao_sexta_desbloqueada: metrics.missaoSextaDesbloqueada,
+          missao_titulo: metrics.missaoTitulo,
+          missao_prompt: metrics.missaoPrompt
+        }, { onConflict: 'aluno_id,semana_inicio' });
+
+      if (lError) throw lError;
 
       alert('Fechamento de semana salvo com sucesso! A família foi notificada.');
-      setSelectedStudent(null);
-      setMetrics({ oralidade: 0, compreensao: 0, escrita: 0, cultura: 0, feedback: '', orientacao: '' });
-    } catch (err) {
+      fetchStudentReports(selectedStudent.id);
+      setMetrics({ 
+        oralidade: 0, 
+        compreensao: 0, 
+        escrita: 0, 
+        cultura: 0, 
+        feedback: '', 
+        orientacao: '',
+        missaoTitulo: '',
+        missaoPrompt: '',
+        historiaDesbloqueada: true,
+        jogoDesbloqueado: true,
+        tarefaDesbloqueada: true,
+        missaoSextaDesbloqueada: true
+      });
+    } catch (err: any) {
       console.error('Error saving weekly closing:', err);
-      alert('Erro ao salvar fechamento. Verifique se as tabelas SQL foram criadas.');
+      alert(`Erro ao salvar fechamento: ${err.message || 'Verifique se as tabelas SQL foram criadas.'}`);
     } finally {
       setIsSavingMetrics(false);
     }
@@ -3852,6 +3940,72 @@ const TutoresPage = () => {
                           </div>
                         </div>
 
+                        {/* Weekly Loop Management */}
+                        <div className="space-y-6">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-secondary flex items-center gap-2">
+                            <Calendar className="w-4 h-4" /> Gerenciamento do Loop Semanal
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {[
+                              { id: 'historiaDesbloqueada', label: 'História', icon: BookOpen },
+                              { id: 'jogoDesbloqueado', label: 'Jogo', icon: Gamepad2 },
+                              { id: 'tarefaDesbloqueada', label: 'Tarefa', icon: Pencil },
+                              { id: 'missaoSextaDesbloqueada', label: 'Missão', icon: Target }
+                            ].map((step) => (
+                              <button
+                                key={step.id}
+                                type="button"
+                                onClick={() => setMetrics({ ...metrics, [step.id]: !(metrics as any)[step.id] })}
+                                className={cn(
+                                  "p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-3",
+                                  (metrics as any)[step.id] 
+                                    ? "bg-primary/5 border-primary text-primary shadow-sm" 
+                                    : "bg-white border-gray-100 text-secondary/20 hover:border-gray-200"
+                                )}
+                              >
+                                <step.icon className="w-6 h-6" />
+                                <span className="text-[10px] font-black uppercase tracking-widest">{step.label}</span>
+                                <div className={cn(
+                                  "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                                  (metrics as any)[step.id] ? "bg-primary border-primary" : "border-gray-200"
+                                )}>
+                                  {(metrics as any)[step.id] && <CheckCircle2 className="w-3 h-3 text-white" />}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Home Mission Prompt */}
+                        <div className="space-y-6">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-secondary flex items-center gap-2">
+                            <Sparkles className="w-4 h-4" /> Missão de Casa (Sexta-feira)
+                          </h4>
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-4">Título da Missão</label>
+                              <input 
+                                type="text"
+                                value={metrics.missaoTitulo}
+                                onChange={(e) => setMetrics({ ...metrics, missaoTitulo: e.target.value })}
+                                className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                                placeholder="Ex: Entrevista com a Vovó"
+                                required={metrics.missaoSextaDesbloqueada}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-4">Prompt da Missão (Instrução para a Família)</label>
+                              <textarea 
+                                value={metrics.missaoPrompt}
+                                onChange={(e) => setMetrics({ ...metrics, missaoPrompt: e.target.value })}
+                                className="w-full p-6 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-medium h-24"
+                                placeholder="O que a criança e a família devem fazer juntas?"
+                                required={metrics.missaoSextaDesbloqueada}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="pt-8 border-t border-gray-50 flex justify-end gap-4">
                           <button 
                             type="button"
@@ -3869,6 +4023,65 @@ const TutoresPage = () => {
                           </button>
                         </div>
                       </form>
+
+                      {/* Reflections History */}
+                      {selectedStudentReflections.length > 0 && (
+                        <div className="pt-10 border-t border-gray-50 space-y-6">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-success flex items-center gap-2">
+                            <Sparkles className="w-4 h-4" /> Reflexões da Família
+                          </h4>
+                          <div className="space-y-4">
+                            {selectedStudentReflections.map((reflection) => (
+                              <div key={reflection.id} className="p-6 bg-success/5 rounded-3xl border border-success/10 space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-success">Engajamento:</span>
+                                    <div className="flex gap-1">
+                                      {[1, 2, 3, 4, 5].map((n) => (
+                                        <div key={n} className={cn("w-2 h-2 rounded-full", n <= reflection.engajamento ? "bg-success" : "bg-success/20")} />
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-secondary/40">
+                                    {new Date(reflection.created_at).toLocaleDateString('pt-BR')}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-secondary/70 font-medium leading-relaxed italic">"{reflection.comentario}"</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Reports History */}
+                      {selectedStudentReports.length > 0 && (
+                        <div className="pt-10 border-t border-gray-50 space-y-6">
+                          <h4 className="text-xs font-black uppercase tracking-widest text-secondary flex items-center gap-2">
+                            <Calendar className="w-4 h-4" /> Histórico de Relatórios
+                          </h4>
+                          <div className="space-y-4">
+                            {selectedStudentReports.map((report) => (
+                              <div key={report.id} className="p-6 bg-gray-50 rounded-3xl space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-primary">
+                                    Semana de {new Date(report.semana_inicio).toLocaleDateString('pt-BR')}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-secondary/40">
+                                    Enviado em {new Date(report.created_at).toLocaleDateString('pt-BR')}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-secondary/70 font-medium italic">"{report.conteudo}"</p>
+                                {report.orientacao_familia && (
+                                  <div className="pt-2 border-t border-gray-100">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-secondary/40 mb-1">Orientação:</p>
+                                    <p className="text-xs text-secondary/60">{report.orientacao_familia}</p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </motion.div>
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-center p-20 bg-white rounded-[40px] border-2 border-dashed border-gray-100">

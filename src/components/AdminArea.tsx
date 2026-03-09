@@ -464,7 +464,7 @@ const ManageResource = ({
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white w-full max-w-xl rounded-[40px] shadow-2xl overflow-hidden"
+              className="relative bg-white w-full max-w-4xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]"
             >
               <div className="p-10 border-b border-gray-50 flex justify-between items-center">
                 <div>
@@ -478,46 +478,51 @@ const ManageResource = ({
                 </button>
               </div>
 
-              <form onSubmit={handleSave} className="p-10 space-y-6">
-                <div className="grid gap-6">
-                  {fields.map(field => (
-                    <div key={field.key} className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">
-                        {field.label}
-                      </label>
-                      {field.type === 'select' ? (
-                        <select 
-                          required
-                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
-                          value={formData[field.key] || ''}
-                          onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
-                        >
-                          <option value="">Selecione...</option>
-                          {field.options?.map(opt => {
-                            const value = typeof opt === 'string' ? opt : opt.value;
-                            const label = typeof opt === 'string' ? opt : opt.label;
-                            return <option key={value} value={value}>{label}</option>;
-                          })}
-                        </select>
-                      ) : (
-                        <input 
-                          required
-                          type={field.type}
-                          placeholder={field.label}
-                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
-                          value={formData[field.key] || ''}
-                          onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
-                        />
-                      )}
-                    </div>
-                  ))}
+              <form onSubmit={handleSave} className="flex flex-col overflow-hidden">
+                <div className="flex-1 overflow-y-auto p-10 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {fields.map(field => (
+                      <div key={field.key} className={cn(
+                        "space-y-2",
+                        (field.key === 'bio' || field.key === 'projeto_final_feedback' || field.key === 'endereco' || field.key === 'observacoes') ? "md:col-span-2" : ""
+                      )}>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">
+                          {field.label}
+                        </label>
+                        {field.type === 'select' ? (
+                          <select 
+                            required
+                            className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                            value={formData[field.key] || ''}
+                            onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                          >
+                            <option value="">Selecione...</option>
+                            {field.options?.map(opt => {
+                              const value = typeof opt === 'string' ? opt : opt.value;
+                              const label = typeof opt === 'string' ? opt : opt.label;
+                              return <option key={value} value={value}>{label}</option>;
+                            })}
+                          </select>
+                        ) : (
+                          <input 
+                            required
+                            type={field.type}
+                            placeholder={field.label}
+                            className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                            value={formData[field.key] || ''}
+                            onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="pt-6 flex gap-4">
+                <div className="p-10 border-t border-gray-50 bg-gray-50/50 flex gap-4">
                   <button 
                     type="button"
                     onClick={handleCloseModal}
-                    className="flex-1 px-8 py-4 bg-gray-50 text-secondary/60 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-100 transition-all"
+                    className="flex-1 px-8 py-4 bg-white text-secondary/60 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-100 transition-all border border-gray-200"
                   >
                     Cancelar
                   </button>
