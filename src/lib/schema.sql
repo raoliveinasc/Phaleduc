@@ -59,8 +59,7 @@ CREATE TABLE IF NOT EXISTS metricas_progresso (
     escrita INTEGER CHECK (escrita >= 0 AND escrita <= 4),
     cultura INTEGER CHECK (cultura >= 0 AND cultura <= 4),
     data_avaliacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    observacoes TEXT,
-    UNIQUE(aluno_id, semana_inicio)
+    observacoes TEXT
 );
 
 -- Tabela para feedbacks qualitativos semanais/quinzenais
@@ -72,8 +71,7 @@ CREATE TABLE IF NOT EXISTS feedbacks_pedagogicos (
     conteudo TEXT NOT NULL,
     orientacao_familia TEXT,
     data_competencia DATE DEFAULT CURRENT_DATE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(aluno_id, semana_inicio)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabela para avaliações de desempenho dos tutores (Admin -> Tutor)

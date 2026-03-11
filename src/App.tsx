@@ -3461,10 +3461,10 @@ const TutoresPage = () => {
     const semanaInicio = getMonday(new Date());
 
     try {
-      // 1. Salvar métricas N0-N4
+      // 1. Salvar métricas N0-N4 (Insert para manter histórico)
       const { error: mError } = await supabase
         .from('metricas_progresso')
-        .upsert({
+        .insert({
           aluno_id: selectedStudent.id,
           tutor_id: tutorData.id,
           semana_inicio: semanaInicio,
@@ -3472,20 +3472,20 @@ const TutoresPage = () => {
           compreensao: metrics.compreensao,
           escrita: metrics.escrita,
           cultura: metrics.cultura
-        }, { onConflict: 'aluno_id,semana_inicio' });
+        });
 
       if (mError) throw mError;
 
-      // 2. Salvar feedback qualitativo
+      // 2. Salvar feedback qualitativo (Insert para manter histórico)
       const { error: fError } = await supabase
         .from('feedbacks_pedagogicos')
-        .upsert({
+        .insert({
           aluno_id: selectedStudent.id,
           tutor_id: tutorData.id,
           semana_inicio: semanaInicio,
           conteudo: metrics.feedback,
           orientacao_familia: metrics.orientacao
-        }, { onConflict: 'aluno_id,semana_inicio' });
+        });
 
       if (fError) throw fError;
 
@@ -4030,7 +4030,7 @@ const TutoresPage = () => {
                           <h4 className="text-xs font-black uppercase tracking-widest text-success flex items-center gap-2">
                             <Sparkles className="w-4 h-4" /> Reflexões da Família
                           </h4>
-                          <div className="space-y-4">
+                          <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                             {selectedStudentReflections.map((reflection) => (
                               <div key={reflection.id} className="p-6 bg-success/5 rounded-3xl border border-success/10 space-y-3">
                                 <div className="flex justify-between items-center">
@@ -4043,7 +4043,7 @@ const TutoresPage = () => {
                                     </div>
                                   </div>
                                   <span className="text-[10px] font-bold text-secondary/40">
-                                    {new Date(reflection.created_at).toLocaleDateString('pt-BR')}
+                                    {new Date(reflection.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                   </span>
                                 </div>
                                 <p className="text-sm text-secondary/70 font-medium leading-relaxed italic">"{reflection.comentario}"</p>
@@ -4059,7 +4059,7 @@ const TutoresPage = () => {
                           <h4 className="text-xs font-black uppercase tracking-widest text-secondary flex items-center gap-2">
                             <Calendar className="w-4 h-4" /> Histórico de Relatórios
                           </h4>
-                          <div className="space-y-4">
+                          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                             {selectedStudentReports.map((report) => (
                               <div key={report.id} className="p-6 bg-gray-50 rounded-3xl space-y-3">
                                 <div className="flex justify-between items-center">
@@ -4067,7 +4067,7 @@ const TutoresPage = () => {
                                     Semana de {new Date(report.semana_inicio).toLocaleDateString('pt-BR')}
                                   </span>
                                   <span className="text-[10px] font-bold text-secondary/40">
-                                    Enviado em {new Date(report.created_at).toLocaleDateString('pt-BR')}
+                                    Enviado em {new Date(report.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                   </span>
                                 </div>
                                 <p className="text-sm text-secondary/70 font-medium italic">"{report.conteudo}"</p>
