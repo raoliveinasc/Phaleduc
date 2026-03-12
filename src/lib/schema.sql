@@ -113,10 +113,10 @@ CREATE TABLE IF NOT EXISTS missoes_casa (
 -- Tabela para as reflexões da família (Mão Dupla)
 CREATE TABLE IF NOT EXISTS reflexoes_familia (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    missao_id UUID REFERENCES missoes_casa(id) ON DELETE CASCADE,
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
     familia_id UUID REFERENCES pais(id) ON DELETE CASCADE,
-    nivel_engajamento INTEGER CHECK (nivel_engajamento >= 1 AND nivel_engajamento <= 5),
+    semana_inicio DATE,
+    engajamento INTEGER CHECK (engajamento >= 1 AND engajamento <= 5),
     comentario TEXT,
     audio_url TEXT, -- URL para o áudio/vídeo de 30-60 seg
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

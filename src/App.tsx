@@ -2541,7 +2541,8 @@ const AlunosPaisPage = () => {
         .insert([{
           aluno_id: activeChildId,
           familia_id: user.id,
-          nivel_engajamento: reflection.engajamento,
+          semana_inicio: loopConfig?.semana_inicio,
+          engajamento: reflection.engajamento,
           comentario: reflection.comentario
         }]);
 
