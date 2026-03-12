@@ -38,7 +38,16 @@ import {
   Trophy,
   ClipboardCheck,
   MessageSquare,
-  Award
+  Award,
+  Library,
+  FileText,
+  Music,
+  Video,
+  Link2,
+  ListChecks,
+  Layers,
+  Gamepad2,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -57,6 +66,7 @@ const AdminSidebar = () => {
   const menuItems = [
     { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
     { name: 'Turmas', path: '/admin/turmas', icon: Layout },
+    { name: 'Biblioteca', path: '/admin/biblioteca', icon: Library },
     { name: 'Pais', path: '/admin/pais', icon: Users },
     { name: 'Alunos', path: '/admin/alunos', icon: Backpack },
     { name: 'Tutores', path: '/admin/tutores', icon: GraduationCap },
@@ -108,18 +118,19 @@ const AdminSidebar = () => {
 };
 
 const AdminDashboard = () => {
-  const [stats, setStats] = useState({ pais: 0, alunos: 0, tutores: 0, turmas: 0 });
+  const [stats, setStats] = useState({ pais: 0, alunos: 0, tutores: 0, turmas: 0, biblioteca: 0 });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [paisCount, alunosCount, tutoresCount, turmasCount] = await Promise.all([
+        const [paisCount, alunosCount, tutoresCount, turmasCount, bibliotecaCount] = await Promise.all([
           supabase.from('pais').select('*', { count: 'exact', head: true }),
           supabase.from('alunos').select('*', { count: 'exact', head: true }),
           supabase.from('tutores').select('*', { count: 'exact', head: true }),
           supabase.from('turmas').select('*', { count: 'exact', head: true }),
+          supabase.from('biblioteca_recursos').select('*', { count: 'exact', head: true }),
         ]);
 
         setStats({
@@ -127,6 +138,7 @@ const AdminDashboard = () => {
           alunos: alunosCount.count || 0,
           tutores: tutoresCount.count || 0,
           turmas: turmasCount.count || 0,
+          biblioteca: bibliotecaCount.count || 0,
         });
       } catch (err) {
         console.error('Error fetching stats:', err);
@@ -139,6 +151,7 @@ const AdminDashboard = () => {
 
   const cards = [
     { name: 'Turmas Ativas', value: stats.turmas, icon: Layout, color: 'bg-indigo-500', path: '/admin/turmas' },
+    { name: 'Recursos na Biblioteca', value: stats.biblioteca, icon: Library, color: 'bg-emerald-500', path: '/admin/biblioteca' },
     { name: 'Pais Cadastrados', value: stats.pais, icon: Users, color: 'bg-blue-500', path: '/admin/pais' },
     { name: 'Alunos Ativos', value: stats.alunos, icon: Backpack, color: 'bg-primary', path: '/admin/alunos' },
     { name: 'Tutores Certificados', value: stats.tutores, icon: GraduationCap, color: 'bg-orange-500', path: '/admin/tutores' },
@@ -680,6 +693,498 @@ const TutorEvaluationModal = ({ tutor, onClose, onSave }: { tutor: any, onClose:
   );
 };
 
+// --- Biblioteca Management Component ---
+const ManageBiblioteca = () => {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [formData, setFormData] = useState<any>({ tipo: 'historia', formato: 'pdf', conteudo_json: { items: [] } });
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  async function fetchData() {
+    setLoading(true);
+    try {
+      const { data: result, error } = await supabase.from('biblioteca_recursos').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      setData(result || []);
+    } catch (err) {
+      console.error('Error fetching biblioteca:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleOpenModal = (item: any = null) => {
+    setEditingItem(item);
+    setFormData(item || { tipo: 'historia', formato: 'pdf', conteudo_json: { items: [] } });
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const cleanData = { ...formData };
+      delete cleanData.id;
+      delete cleanData.created_at;
+
+      let result;
+      if (editingItem) {
+        result = await supabase.from('biblioteca_recursos').update(cleanData).eq('id', editingItem.id);
+      } else {
+        result = await supabase.from('biblioteca_recursos').insert([cleanData]);
+      }
+
+      if (result.error) throw result.error;
+      
+      handleCloseModal();
+      fetchData();
+    } catch (err: any) {
+      console.error('Error saving biblioteca:', err);
+      alert('Erro ao salvar: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este recurso?')) return;
+    try {
+      const { error } = await supabase.from('biblioteca_recursos').delete().eq('id', id);
+      if (error) throw error;
+      fetchData();
+    } catch (err: any) {
+      alert('Erro ao excluir: ' + err.message);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingItem(null);
+    setFormData({ tipo: 'historia', formato: 'pdf', conteudo_json: { items: [] } });
+  };
+
+  const addItemToContent = () => {
+    const items = formData.conteudo_json?.items || [];
+    setFormData({
+      ...formData,
+      conteudo_json: {
+        ...formData.conteudo_json,
+        items: [...items, ""]
+      }
+    });
+  };
+
+  const updateItemInContent = (index: number, value: string) => {
+    const items = [...(formData.conteudo_json?.items || [])];
+    items[index] = value;
+    setFormData({
+      ...formData,
+      conteudo_json: {
+        ...formData.conteudo_json,
+        items
+      }
+    });
+  };
+
+  const removeItemFromContent = (index: number) => {
+    const items = (formData.conteudo_json?.items || []).filter((_: any, i: number) => i !== index);
+    setFormData({
+      ...formData,
+      conteudo_json: {
+        ...formData.conteudo_json,
+        items
+      }
+    });
+  };
+
+  const filteredData = data.filter(item => 
+    item.titulo.toLowerCase().includes(search.toLowerCase()) ||
+    item.tipo.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const getIconForType = (tipo: string) => {
+    switch (tipo) {
+      case 'historia': return BookOpen;
+      case 'jogo': return Gamepad2;
+      case 'tarefa': return ListChecks;
+      case 'missao': return Layers;
+      case 'revisao': return Sparkles;
+      default: return Library;
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-black text-secondary tracking-tight flex items-center gap-3">
+            <Library className="w-8 h-8 text-primary" /> Biblioteca de Atividades
+          </h2>
+          <p className="text-secondary/60 font-medium">Gerencie o catálogo de conteúdos pedagógicos.</p>
+        </div>
+        <button 
+          onClick={() => handleOpenModal()}
+          className="bg-primary text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-lg hover:shadow-primary/20 transition-all flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" /> Novo Recurso
+        </button>
+      </div>
+
+      <div className="bg-white rounded-[40px] shadow-xl border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Buscar por título ou tipo..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-medium text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-secondary/40">Recurso</th>
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-secondary/40">Tipo / Formato</th>
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-secondary/40">Nível</th>
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-secondary/40">Data</th>
+                <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-secondary/40 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-8 py-20 text-center">
+                    <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-4" />
+                    <p className="text-secondary/40 font-black uppercase text-[10px] tracking-widest">Carregando Biblioteca...</p>
+                  </td>
+                </tr>
+              ) : filteredData.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-8 py-20 text-center">
+                    <p className="text-secondary/40 font-black uppercase text-[10px] tracking-widest">Nenhum recurso encontrado</p>
+                  </td>
+                </tr>
+              ) : (
+                filteredData.map((item) => {
+                  const Icon = getIconForType(item.tipo);
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
+                            {item.miniatura_url ? (
+                              <img src={item.miniatura_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary">
+                                <Icon className="w-6 h-6" />
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-black text-secondary text-sm">{item.titulo}</p>
+                            <p className="text-[10px] text-secondary/40 font-bold uppercase truncate max-w-[200px]">{item.descricao || 'Sem descrição'}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-primary bg-primary/5 px-2 py-1 rounded-md w-fit">
+                            {item.tipo}
+                          </span>
+                          <span className="text-[9px] font-bold text-secondary/40 uppercase">
+                            {item.formato || 'N/A'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-5">
+                        <span className="text-xs font-black text-secondary">{item.nivel || '-'}</span>
+                      </td>
+                      <td className="px-8 py-5">
+                        <span className="text-[10px] font-bold text-secondary/40 uppercase">
+                          {new Date(item.created_at).toLocaleDateString()}
+                        </span>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={() => handleOpenModal(item)}
+                            className="p-2 text-secondary/20 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(item.id)}
+                            className="p-2 text-secondary/20 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCloseModal}
+              className="absolute inset-0 bg-secondary/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-2xl bg-white rounded-[40px] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <div>
+                  <h3 className="text-2xl font-black text-secondary tracking-tight">
+                    {editingItem ? 'Editar Recurso' : 'Novo Recurso'}
+                  </h3>
+                  <p className="text-xs font-bold text-secondary/40 uppercase tracking-widest">Preencha os detalhes da atividade</p>
+                </div>
+                <button 
+                  onClick={handleCloseModal}
+                  className="p-2 hover:bg-gray-200 rounded-full transition-all"
+                >
+                  <X className="w-6 h-6 text-secondary" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSave} className="p-8 max-h-[70vh] overflow-y-auto space-y-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Título</label>
+                    <input 
+                      required
+                      type="text"
+                      value={formData.titulo || ''}
+                      onChange={(e) => setFormData({...formData, titulo: e.target.value})}
+                      className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Tipo de Atividade</label>
+                    <select 
+                      value={formData.tipo || 'historia'}
+                      onChange={(e) => {
+                        const tipo = e.target.value;
+                        let formato = 'pdf';
+                        if (tipo === 'jogo') formato = 'link';
+                        if (tipo === 'tarefa') formato = 'lista';
+                        if (tipo === 'missao') formato = 'cards';
+                        setFormData({...formData, tipo, formato});
+                      }}
+                      className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
+                    >
+                      <option value="historia">História</option>
+                      <option value="jogo">Jogo</option>
+                      <option value="tarefa">Tarefa</option>
+                      <option value="missao">Missão</option>
+                      <option value="revisao">Revisão</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Descrição</label>
+                  <textarea 
+                    value={formData.descricao || ''}
+                    onChange={(e) => setFormData({...formData, descricao: e.target.value})}
+                    className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm min-h-[100px]"
+                  />
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Nível</label>
+                    <select 
+                      value={formData.nivel || ''}
+                      onChange={(e) => setFormData({...formData, nivel: e.target.value})}
+                      className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
+                    >
+                      <option value="">Selecione o Nível</option>
+                      <option value="N0">N0</option>
+                      <option value="N1">N1</option>
+                      <option value="N2">N2</option>
+                      <option value="N3">N3</option>
+                      <option value="N4">N4</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Miniatura (URL)</label>
+                    <input 
+                      type="text"
+                      value={formData.miniatura_url || ''}
+                      onChange={(e) => setFormData({...formData, miniatura_url: e.target.value})}
+                      className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* Dynamic Fields based on Type */}
+                <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 space-y-6">
+                  <h4 className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2">
+                    <PlusCircle className="w-4 h-4" /> Configuração Específica
+                  </h4>
+
+                  {formData.tipo === 'historia' && (
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Formato</label>
+                        <select 
+                          value={formData.formato || 'pdf'}
+                          onChange={(e) => setFormData({...formData, formato: e.target.value})}
+                          className="w-full px-6 py-4 bg-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
+                        >
+                          <option value="pdf">PDF</option>
+                          <option value="audio">Áudio</option>
+                          <option value="video">Vídeo</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">URL do Arquivo</label>
+                        <input 
+                          type="text"
+                          value={formData.recurso_url || ''}
+                          onChange={(e) => setFormData({...formData, recurso_url: e.target.value})}
+                          className="w-full px-6 py-4 bg-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
+                          placeholder="https://..."
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.tipo === 'jogo' && (
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Origem</label>
+                        <select 
+                          value={formData.formato || 'link'}
+                          onChange={(e) => setFormData({...formData, formato: e.target.value})}
+                          className="w-full px-6 py-4 bg-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
+                        >
+                          <option value="link">Link Externo (Kahoot/Wordwall)</option>
+                          <option value="interno">Área Interna</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Link do Jogo</label>
+                        <input 
+                          type="text"
+                          value={formData.recurso_url || ''}
+                          onChange={(e) => setFormData({...formData, recurso_url: e.target.value})}
+                          className="w-full px-6 py-4 bg-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
+                          placeholder="https://wordwall.net/..."
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {(formData.tipo === 'tarefa' || formData.tipo === 'missao') && (
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">
+                          {formData.tipo === 'tarefa' ? 'Lista de Ações' : 'Cards da Missão'}
+                        </label>
+                        <button 
+                          type="button"
+                          onClick={addItemToContent}
+                          className="text-[10px] font-black text-primary uppercase tracking-widest hover:underline"
+                        >
+                          + Adicionar Item
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        {(formData.conteudo_json?.items || []).map((item: string, idx: number) => (
+                          <div key={idx} className="flex gap-2">
+                            <input 
+                              type="text"
+                              value={item}
+                              onChange={(e) => updateItemInContent(idx, e.target.value)}
+                              className="flex-1 px-4 py-3 bg-white rounded-xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-medium text-sm"
+                              placeholder={`Item ${idx + 1}`}
+                            />
+                            <button 
+                              type="button"
+                              onClick={() => removeItemFromContent(idx)}
+                              className="p-3 text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.tipo === 'revisao' && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Configuração de Revisão</label>
+                      <p className="text-[10px] text-secondary/40 font-medium italic ml-2">A revisão combina elementos dos outros tipos. Use a descrição para detalhar o roteiro.</p>
+                      <input 
+                        type="text"
+                        value={formData.recurso_url || ''}
+                        onChange={(e) => setFormData({...formData, recurso_url: e.target.value})}
+                        className="w-full px-6 py-4 bg-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
+                        placeholder="Link ou ID de referência"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    type="button"
+                    onClick={handleCloseModal}
+                    className="flex-1 px-8 py-4 bg-gray-100 text-secondary rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={isSaving}
+                    className="flex-1 px-8 py-4 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-lg hover:shadow-primary/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4" />
+                    )}
+                    {editingItem ? 'Salvar Alterações' : 'Criar Recurso'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 export const AdminArea = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -807,6 +1312,9 @@ export const AdminArea = () => {
                   { key: 'tutor_id', label: 'Tutor Responsável', type: 'select', options: tutors }
                 ]}
               />
+            } />
+            <Route path="/biblioteca" element={
+              <ManageBiblioteca />
             } />
             <Route path="/pais" element={
               <ManageResource 
