@@ -3385,6 +3385,8 @@ const TutoresPage = () => {
   const [biblioteca, setBiblioteca] = useState<any[]>([]);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [activeStepToAssign, setActiveStepToAssign] = useState<number | null>(null);
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [libraryFilter, setLibraryFilter] = useState('all');
   const [weeklyLoop, setWeeklyLoop] = useState<any>({
     historia: null,
     jogo: null,
@@ -3512,6 +3514,20 @@ const TutoresPage = () => {
     }
   };
 
+  const fetchLibrary = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('biblioteca_recursos')
+        .select('*')
+        .order('titulo');
+      
+      if (error) throw error;
+      if (data) setBiblioteca(data);
+    } catch (err) {
+      console.error('Error fetching library:', err);
+    }
+  };
+
   const fetchTutorStudents = async () => {
     try {
       const { data, error } = await supabase
@@ -3528,11 +3544,7 @@ const TutoresPage = () => {
       
       if (turmasData) setTurmas(turmasData);
 
-      const { data: recursos } = await supabase
-        .from('biblioteca_recursos')
-        .select('*');
-      
-      if (recursos) setBiblioteca(recursos);
+      await fetchLibrary();
     } catch (err) {
       console.error('Error fetching tutor data:', err);
     }
@@ -4090,8 +4102,18 @@ const TutoresPage = () => {
                         ) : (
                           <button 
                             onClick={() => {
+                              const typeMap: Record<number, string> = {
+                                1: 'historia',
+                                2: 'jogo',
+                                3: 'tarefa',
+                                4: 'revisao',
+                                5: 'missao'
+                              };
                               setActiveStepToAssign(step.id);
+                              setLibraryFilter(typeMap[step.id] || 'all');
+                              setLibrarySearch('');
                               setIsLibraryOpen(true);
+                              fetchLibrary(); // Refresh library when opening
                             }}
                             className="flex-1 flex flex-col items-center justify-center gap-3 group"
                           >
@@ -4857,52 +4879,96 @@ const TutoresPage = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white w-full max-w-4xl rounded-[48px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
           >
-            <div className="p-8 border-b border-gray-100 flex justify-between items-center">
-              <div>
-                <h3 className="text-xl font-black text-secondary">Biblioteca de Recursos</h3>
-                <p className="text-xs font-medium text-secondary/40 uppercase tracking-widest">Selecione o conteúdo para a etapa</p>
+            <div className="p-8 border-b border-gray-100 flex flex-col gap-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-xl font-black text-secondary">Biblioteca de Recursos</h3>
+                  <p className="text-xs font-medium text-secondary/40 uppercase tracking-widest">Selecione o conteúdo para a etapa</p>
+                </div>
+                <button onClick={() => setIsLibraryOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-all">
+                  <X className="w-6 h-6 text-secondary/40" />
+                </button>
               </div>
-              <button onClick={() => setIsLibraryOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-all">
-                <X className="w-6 h-6 text-secondary/40" />
-              </button>
+
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary/20" />
+                  <input 
+                    type="text"
+                    placeholder="Buscar por título ou descrição..."
+                    value={librarySearch}
+                    onChange={(e) => setLibrarySearch(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-medium text-sm"
+                  />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
+                  {['all', 'historia', 'jogo', 'tarefa', 'revisao', 'missao'].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setLibraryFilter(type)}
+                      className={cn(
+                        "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                        libraryFilter === type 
+                          ? "bg-primary text-white shadow-lg shadow-primary/20" 
+                          : "bg-gray-100 text-secondary/40 hover:bg-gray-200"
+                      )}
+                    >
+                      {type === 'all' ? 'Todos' : type}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
             
             <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-              {biblioteca.length > 0 ? biblioteca.map((item) => (
-                <button 
-                  key={item.id}
-                  onClick={() => {
-                    const stepKey = activeStepToAssign === 1 ? 'historia' : 
-                                   activeStepToAssign === 2 ? 'jogo' : 
-                                   activeStepToAssign === 3 ? 'tarefa' : 
-                                   activeStepToAssign === 4 ? 'revisao' : 'missao';
-                    const newLoop = {...weeklyLoop, [stepKey]: item};
-                    setWeeklyLoop(newLoop);
-                    saveWeeklyLoop(newLoop);
-                    setIsLibraryOpen(false);
-                  }}
-                  className="group text-left space-y-3"
-                >
-                  <div className="aspect-video rounded-3xl overflow-hidden bg-gray-100 relative">
-                    <img src={item.miniatura_url || `https://picsum.photos/seed/${item.id}/400/225`} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" referrerPolicy="no-referrer" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
-                      <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all">
-                        <Plus className="w-5 h-5 text-primary" />
+              {(() => {
+                const filtered = biblioteca.filter(item => {
+                  const matchesSearch = item.titulo.toLowerCase().includes(librarySearch.toLowerCase()) || 
+                                       (item.descricao && item.descricao.toLowerCase().includes(librarySearch.toLowerCase()));
+                  const matchesFilter = libraryFilter === 'all' || item.tipo === libraryFilter;
+                  return matchesSearch && matchesFilter;
+                });
+
+                if (filtered.length > 0) {
+                  return filtered.map((item) => (
+                    <button 
+                      key={item.id}
+                      onClick={() => {
+                        const stepKey = activeStepToAssign === 1 ? 'historia' : 
+                                       activeStepToAssign === 2 ? 'jogo' : 
+                                       activeStepToAssign === 3 ? 'tarefa' : 
+                                       activeStepToAssign === 4 ? 'revisao' : 'missao';
+                        const newLoop = {...weeklyLoop, [stepKey]: item};
+                        setWeeklyLoop(newLoop);
+                        saveWeeklyLoop(newLoop);
+                        setIsLibraryOpen(false);
+                      }}
+                      className="group text-left space-y-3"
+                    >
+                      <div className="aspect-video rounded-3xl overflow-hidden bg-gray-100 relative">
+                        <img src={item.miniatura_url || `https://picsum.photos/seed/${item.id}/400/225`} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" referrerPolicy="no-referrer" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all">
+                            <Plus className="w-5 h-5 text-primary" />
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                      <div className="px-2">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-primary bg-primary/5 px-2 py-1 rounded-md">{item.tipo}</span>
+                        <h5 className="text-sm font-black text-secondary mt-1">{item.titulo}</h5>
+                        <p className="text-xs text-secondary/40 line-clamp-2 mt-1">{item.descricao}</p>
+                      </div>
+                    </button>
+                  ));
+                }
+
+                return (
+                  <div className="col-span-full py-20 text-center">
+                    <Package className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                    <p className="text-secondary/40 font-bold uppercase tracking-widest text-xs">Nenhum recurso encontrado</p>
                   </div>
-                  <div className="px-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-primary bg-primary/5 px-2 py-1 rounded-md">{item.tipo}</span>
-                    <h5 className="text-sm font-black text-secondary mt-1">{item.titulo}</h5>
-                    <p className="text-xs text-secondary/40 line-clamp-2 mt-1">{item.descricao}</p>
-                  </div>
-                </button>
-              )) : (
-                <div className="col-span-full py-20 text-center">
-                  <Package className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                  <p className="text-secondary/40 font-bold uppercase tracking-widest text-xs">Nenhum recurso na biblioteca</p>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </motion.div>
         </div>
