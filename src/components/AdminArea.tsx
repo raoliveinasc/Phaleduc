@@ -12,6 +12,7 @@ import {
   GraduationCap, 
   UserPlus, 
   LayoutDashboard, 
+  Layout,
   ChevronRight, 
   Plus, 
   Search, 
@@ -55,6 +56,7 @@ const AdminSidebar = () => {
   
   const menuItems = [
     { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+    { name: 'Turmas', path: '/admin/turmas', icon: Layout },
     { name: 'Pais', path: '/admin/pais', icon: Users },
     { name: 'Alunos', path: '/admin/alunos', icon: Backpack },
     { name: 'Tutores', path: '/admin/tutores', icon: GraduationCap },
@@ -106,23 +108,25 @@ const AdminSidebar = () => {
 };
 
 const AdminDashboard = () => {
-  const [stats, setStats] = useState({ pais: 0, alunos: 0, tutores: 0 });
+  const [stats, setStats] = useState({ pais: 0, alunos: 0, tutores: 0, turmas: 0 });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [paisCount, alunosCount, tutoresCount] = await Promise.all([
+        const [paisCount, alunosCount, tutoresCount, turmasCount] = await Promise.all([
           supabase.from('pais').select('*', { count: 'exact', head: true }),
           supabase.from('alunos').select('*', { count: 'exact', head: true }),
           supabase.from('tutores').select('*', { count: 'exact', head: true }),
+          supabase.from('turmas').select('*', { count: 'exact', head: true }),
         ]);
 
         setStats({
           pais: paisCount.count || 0,
           alunos: alunosCount.count || 0,
           tutores: tutoresCount.count || 0,
+          turmas: turmasCount.count || 0,
         });
       } catch (err) {
         console.error('Error fetching stats:', err);
@@ -134,6 +138,7 @@ const AdminDashboard = () => {
   }, []);
 
   const cards = [
+    { name: 'Turmas Ativas', value: stats.turmas, icon: Layout, color: 'bg-indigo-500', path: '/admin/turmas' },
     { name: 'Pais Cadastrados', value: stats.pais, icon: Users, color: 'bg-blue-500', path: '/admin/pais' },
     { name: 'Alunos Ativos', value: stats.alunos, icon: Backpack, color: 'bg-primary', path: '/admin/alunos' },
     { name: 'Tutores Certificados', value: stats.tutores, icon: GraduationCap, color: 'bg-orange-500', path: '/admin/tutores' },
@@ -672,6 +677,7 @@ export const AdminArea = () => {
   const [configError, setConfigError] = useState<string | null>(null);
   const [parents, setParents] = useState<{ value: string, label: string }[]>([]);
   const [tutors, setTutors] = useState<{ value: string, label: string }[]>([]);
+  const [turmasList, setTurmasList] = useState<{ value: string, label: string }[]>([]);
   const [selectedTutorForEval, setSelectedTutorForEval] = useState<any | null>(null);
 
   useEffect(() => {
@@ -686,10 +692,11 @@ export const AdminArea = () => {
         
         setIsAuthenticated(true);
 
-        // Fetch parents and tutors for the Alunos form
-        const [paisRes, tutoresRes] = await Promise.all([
+        // Fetch parents, tutors and turmas for the Alunos form
+        const [paisRes, tutoresRes, turmasRes] = await Promise.all([
           supabase.from('pais').select('id, nome').order('nome'),
-          supabase.from('tutores').select('id, nome').order('nome')
+          supabase.from('tutores').select('id, nome').order('nome'),
+          supabase.from('turmas').select('id, nome').order('nome')
         ]);
 
         if (paisRes.data) {
@@ -697,6 +704,9 @@ export const AdminArea = () => {
         }
         if (tutoresRes.data) {
           setTutors(tutoresRes.data.map(t => ({ value: t.id, label: t.nome })));
+        }
+        if (turmasRes.data) {
+          setTurmasList(turmasRes.data.map(t => ({ value: t.id, label: t.nome })));
         }
       } catch (err: any) {
         console.error('AdminArea config error:', err);
@@ -771,6 +781,25 @@ export const AdminArea = () => {
           )}
           <Routes>
             <Route path="/" element={<AdminDashboard />} />
+            <Route path="/turmas" element={
+              <ManageResource 
+                title="Turmas" 
+                table="turmas" 
+                icon={Layout}
+                customSelect="*, tutores(nome)"
+                columns={[
+                  { key: 'nome', label: 'Nome' },
+                  { key: 'nivel', label: 'Nível' },
+                  { key: 'tutor_id', label: 'Tutor Responsável', render: (_, item) => item.tutores?.nome || '-' },
+                  { key: 'created_at', label: 'Criada em', render: (val) => new Date(val).toLocaleDateString() }
+                ]}
+                fields={[
+                  { key: 'nome', label: 'Nome da Turma', type: 'text' },
+                  { key: 'nivel', label: 'Nível Pedagógico', type: 'select', options: ['N0', 'N1', 'N2', 'N3', 'N4'] },
+                  { key: 'tutor_id', label: 'Tutor Responsável', type: 'select', options: tutors }
+                ]}
+              />
+            } />
             <Route path="/pais" element={
               <ManageResource 
                 title="Pais" 
@@ -849,7 +878,8 @@ export const AdminArea = () => {
                 fields={[
                   { key: 'nome', label: 'Nome do Aluno', type: 'text' },
                   { key: 'data_nascimento', label: 'Data de Nascimento', type: 'date' },
-                  { key: 'nivel', label: 'Nível/Turma', type: 'select', options: ['Iniciante', 'Intermediário', 'Avançado', 'Nativo'] },
+                  { key: 'turma_id', label: 'Turma', type: 'select', options: turmasList },
+                  { key: 'nivel', label: 'Nível Individual', type: 'select', options: ['Iniciante', 'Intermediário', 'Avançado', 'Nativo'] },
                   { key: 'status', label: 'Status', type: 'select', options: ['ativo', 'inativo'] },
                   { key: 'parent_id', label: 'Responsável', type: 'select', options: parents },
                   { key: 'tutor_id', label: 'Tutor', type: 'select', options: tutors },
