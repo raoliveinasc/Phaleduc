@@ -270,17 +270,25 @@ const ManageResource = ({
     e.preventDefault();
     setIsSaving(true);
     try {
-      // Clean up data: remove empty strings and handle UUIDs
-      const cleanData = { ...formData };
-      Object.keys(cleanData).forEach(key => {
+      // Clean up data: remove empty strings, handle UUIDs and filter out joined objects/arrays
+      const cleanData: any = {};
+      
+      // Only send keys that are present in the fields definition or the ID
+      const allowedKeys = [...fields.map(f => f.key), 'id'];
+      
+      Object.keys(formData).forEach(key => {
+        // Skip keys that are not in our fields (like joined objects 'tutores', 'pais', etc.)
+        if (!allowedKeys.includes(key)) return;
+
+        const value = formData[key];
+        
         // Remove empty strings so Supabase can use NULL or default values
-        if (cleanData[key] === '') {
-          delete cleanData[key];
-        }
+        if (value === '') return;
+        
         // Ensure ID is not sent on insert
-        if (!editingItem && key === 'id') {
-          delete cleanData[key];
-        }
+        if (!editingItem && key === 'id') return;
+
+        cleanData[key] = value;
       });
 
       let result;
