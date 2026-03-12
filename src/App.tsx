@@ -2532,7 +2532,10 @@ const AlunosPaisPage = () => {
 
   const handleSaveReflection = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeChildId) return;
+    if (!activeChildId || !user?.id) {
+      alert('Sessão expirada ou aluno não selecionado. Por favor, faça login novamente.');
+      return;
+    }
 
     setIsSubmittingReflection(true);
     try {
@@ -2541,7 +2544,7 @@ const AlunosPaisPage = () => {
         .insert([{
           aluno_id: activeChildId,
           familia_id: user.id,
-          semana_inicio: loopConfig?.semana_inicio,
+          semana_inicio: loopConfig?.semana_inicio || null,
           engajamento: reflection.engajamento,
           comentario: reflection.comentario
         }]);
@@ -2549,9 +2552,9 @@ const AlunosPaisPage = () => {
       if (error) throw error;
       alert('Reflexão enviada com sucesso! Obrigado por participar.');
       setReflection({ engajamento: 5, comentario: '' });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving reflection:', err);
-      alert('Erro ao enviar reflexão.');
+      alert(`Erro ao enviar reflexão: ${err.message || 'Verifique se as tabelas foram criadas corretamente no banco de dados.'}`);
     } finally {
       setIsSubmittingReflection(false);
     }
