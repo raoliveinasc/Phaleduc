@@ -34,6 +34,8 @@ import {
   Gamepad,
   Menu,
   X,
+  Check,
+  Clock,
   Home,
   Info,
   Camera,
@@ -1670,11 +1672,11 @@ const GamesPlatform = () => (
 // --- Mundo Phaleduc (Alunos & Pais) ---
 
 const WEEKLY_STATIONS = [
-  { day: "Segunda", label: "Input", icon: BookOpen, color: "bg-primary", desc: "Livro/Vídeo" },
-  { day: "Terça", label: "Prática", icon: Gamepad2, color: "bg-success", desc: "Game de Vocabulário" },
-  { day: "Quarta", label: "Produção", icon: Mic, color: "bg-secondary", desc: "Gravar Áudio" },
-  { day: "Quinta", label: "Produção", icon: Pencil, color: "bg-accent", desc: "Escrever Texto" },
-  { day: "Sexta", label: "Missão", icon: Package, color: "bg-danger", desc: "Missão Offline", special: true },
+  { id: 'historia', day: "Segunda", label: "Input", icon: BookOpen, color: "bg-primary", desc: "Livro/Vídeo" },
+  { id: 'jogo', day: "Terça", label: "Prática", icon: Gamepad2, color: "bg-success", desc: "Game de Vocabulário" },
+  { id: 'tarefa', day: "Quarta", label: "Produção", icon: Mic, color: "bg-secondary", desc: "Gravar Áudio" },
+  { id: 'revisao', day: "Quinta", label: "Produção", icon: Pencil, color: "bg-accent", desc: "Escrever Texto" },
+  { id: 'missao', day: "Sexta", label: "Missão", icon: Package, color: "bg-danger", desc: "Missão Offline", special: true },
 ];
 
 const FAUNA_BRASILEIRA = [
@@ -2403,6 +2405,8 @@ const AlunosPaisPage = () => {
   const [view, setView] = useState<'login' | 'register' | 'profiles' | 'child' | 'parent' | 'onboarding'>('login');
   const [onboardingStep, setOnboardingStep] = useState<'password' | 'pin' | 'children'>('password');
   const [selectedChild, setSelectedChild] = useState<any | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -2476,12 +2480,29 @@ const AlunosPaisPage = () => {
   };
 
   useEffect(() => {
-    if (activeChildId) {
-      fetchChildData(activeChildId);
+    const id = view === 'child' ? selectedChild?.id : activeChildId;
+    if (id) {
+      fetchChildData(id);
     }
-  }, [activeChildId]);
+  }, [view, selectedChild?.id, activeChildId]);
+
+  const [childExecutions, setChildExecutions] = useState<any[]>([]);
+
+  const getMonday = (d: Date) => {
+    const date = new Date(d);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(date.setDate(diff));
+    return monday.toISOString().split('T')[0];
+  };
 
   const fetchChildData = async (childId: string) => {
+    if (!childId) return;
+    
+    // Reset local state to avoid showing stale data
+    setLoopConfig(null);
+    setChildExecutions([]);
+
     // 1. Buscar métricas mais recentes
     const { data: metrics } = await supabase
       .from('metricas_progresso')
@@ -2518,16 +2539,91 @@ const AlunosPaisPage = () => {
     
     if (feedbacks) setChildFeedback(feedbacks);
 
-    // 3. Buscar config do loop semanal
-    const { data: config } = await supabase
-      .from('loop_semanal_config')
-      .select('*')
+    // 3. Buscar config do loop semanal (Novo: loops_semanais)
+    const mondayStr = getMonday(new Date());
+
+    // Primeiro tenta buscar por aluno individual
+    let { data: config } = await supabase
+      .from('loops_semanais')
+      .select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)')
       .eq('aluno_id', childId)
-      .order('semana_inicio', { ascending: false })
-      .limit(1)
-      .single();
+      .eq('semana_referencia', mondayStr)
+      .maybeSingle();
+    
+    // Verifica se o config do aluno está vazio (sem nenhuma atividade)
+    const isConfigEmpty = !config || (!config.historia_id && !config.jogo_id && !config.tarefa_id && !config.revisao_id && !config.missao_id);
+
+    // Se não encontrar ou se o config individual estiver vazio, tenta buscar pela turma do aluno
+    if (isConfigEmpty) {
+      const { data: student } = await supabase.from('alunos').select('turma_id').eq('id', childId).single();
+      if (student?.turma_id) {
+        const { data: turmaConfig } = await supabase
+          .from('loops_semanais')
+          .select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)')
+          .eq('turma_id', student.turma_id)
+          .eq('semana_referencia', mondayStr)
+          .maybeSingle();
+        
+        // Só substitui se o da turma tiver conteúdo
+        if (turmaConfig && (turmaConfig.historia_id || turmaConfig.jogo_id || turmaConfig.tarefa_id || turmaConfig.revisao_id || turmaConfig.missao_id)) {
+          config = turmaConfig;
+        }
+      }
+    }
     
     if (config) setLoopConfig(config);
+
+    // 4. Buscar execuções
+    const { data: executions } = await supabase
+      .from('execucoes_atividades')
+      .select('*')
+      .eq('aluno_id', childId);
+    
+    if (executions) setChildExecutions(executions);
+  };
+
+  const getStationStatus = (stationId: string) => {
+    if (!loopConfig) return 'locked';
+    
+    const resource = loopConfig[stationId];
+    if (!resource) return 'locked';
+
+    // Check scheduling
+    const agendamento = loopConfig[`${stationId}_agendamento`];
+    if (!loopConfig.liberacao_manual && agendamento && new Date(agendamento) > new Date()) {
+      return 'scheduled';
+    }
+
+    // Check completion
+    const isCompleted = childExecutions.some(ex => ex.recurso_id === resource.id);
+    if (isCompleted) return 'completed';
+
+    return 'available';
+  };
+
+  const handleCompleteActivity = async (recursoId: string, tipo: string) => {
+    if (!activeChildId) return;
+
+    try {
+      const { error } = await supabase
+        .from('execucoes_atividades')
+        .insert([{
+          aluno_id: activeChildId,
+          recurso_id: recursoId,
+          tipo_atividade: tipo,
+          status: 'concluido',
+          data_conclusao: new Date().toISOString()
+        }]);
+
+      if (error) throw error;
+
+      // Atualizar lista local
+      fetchChildData(activeChildId);
+      alert('Parabéns! Atividade concluída com sucesso! 🌟');
+    } catch (error) {
+      console.error('Erro ao concluir atividade:', error);
+      alert('Erro ao registrar conclusão da atividade.');
+    }
   };
 
   const handleSaveReflection = async (e: React.FormEvent) => {
@@ -2640,6 +2736,7 @@ const AlunosPaisPage = () => {
       const student = students.find(s => s.id.slice(0, 6).toUpperCase() === code.toUpperCase());
       if (student) {
         setSelectedChild(student);
+        setActiveChildId(student.id);
         setView('child');
       } else {
         alert("Código de aluno não encontrado. Verifique com seus pais.");
@@ -2719,6 +2816,7 @@ const AlunosPaisPage = () => {
 
   const handleProfileSelect = (profile: any) => {
     setSelectedChild(profile);
+    setActiveChildId(profile.id);
     setView('child');
   };
 
@@ -2959,35 +3057,67 @@ const AlunosPaisPage = () => {
                 </svg>
 
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-8 md:gap-4">
-                  {WEEKLY_STATIONS.map((station, i) => (
-                    <div 
-                      key={station.day} 
-                      className={cn(
-                        "flex flex-col items-center gap-4",
-                        i % 2 === 0 ? "md:translate-y-12" : "md:-translate-y-12"
-                      )}
-                    >
-                      <button 
+                  {WEEKLY_STATIONS.map((station, i) => {
+                    const status = getStationStatus(station.id);
+                    const resource = loopConfig?.[station.id];
+                    const agendamento = loopConfig?.[`${station.id}_agendamento`];
+
+                    return (
+                      <div 
+                        key={station.day} 
                         className={cn(
-                          "w-24 h-24 md:w-32 md:h-32 rounded-full shadow-2xl flex flex-col items-center justify-center text-white transition-all hover:scale-110 active:scale-95 relative group",
-                          station.color,
-                          station.special && "animate-bounce"
+                          "flex flex-col items-center gap-4",
+                          i % 2 === 0 ? "md:translate-y-12" : "md:-translate-y-12"
                         )}
                       >
-                        <station.icon className="w-10 h-10 md:w-12 md:h-12 mb-1" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">{station.label}</span>
-                        
-                        {/* Tooltip/Desc */}
-                        <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 bg-secondary text-white text-[10px] px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-bold">
-                          {station.desc}
+                        <button 
+                          disabled={status === 'locked' || status === 'scheduled'}
+                          onClick={() => {
+                            if (resource) {
+                              setSelectedActivity({ ...resource, tipo: station.id });
+                              setIsActivityModalOpen(true);
+                            }
+                          }}
+                          className={cn(
+                            "w-24 h-24 md:w-32 md:h-32 rounded-full shadow-2xl flex flex-col items-center justify-center text-white transition-all hover:scale-110 active:scale-95 relative group",
+                            status === 'locked' ? "bg-gray-300 grayscale cursor-not-allowed" : 
+                            status === 'scheduled' ? "bg-amber-400 grayscale-[0.5] cursor-wait" :
+                            status === 'completed' ? "bg-green-500" : station.color,
+                            station.special && status !== 'locked' && "animate-bounce"
+                          )}
+                        >
+                          {status === 'completed' ? (
+                            <Check className="w-10 h-10 md:w-12 md:h-12 mb-1" />
+                          ) : status === 'scheduled' ? (
+                            <Clock className="w-10 h-10 md:w-12 md:h-12 mb-1" />
+                          ) : (
+                            <station.icon className="w-10 h-10 md:w-12 md:h-12 mb-1" />
+                          )}
+                          <span className="text-[10px] font-black uppercase tracking-widest">
+                            {status === 'completed' ? 'Concluído' : station.label}
+                          </span>
+                          
+                          {/* Tooltip/Desc */}
+                          <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 bg-secondary text-white text-[10px] px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-bold z-20">
+                            {status === 'locked' ? 'Aguardando Tutor' : 
+                             status === 'scheduled' ? `Libera em: ${new Date(agendamento).toLocaleString()}` :
+                             resource?.titulo || station.desc}
+                          </div>
+
+                          {/* Status Badge */}
+                          {status === 'available' && (
+                            <div className="absolute -top-2 -right-2 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center shadow-lg animate-pulse">
+                              <Play className="w-4 h-4 fill-current" />
+                            </div>
+                          )}
+                        </button>
+                        <div className="text-center">
+                          <span className="block text-sm font-black text-secondary uppercase tracking-widest">{station.day}</span>
+                          <div className="w-2 h-2 bg-gray-200 rounded-full mx-auto mt-2" />
                         </div>
-                      </button>
-                      <div className="text-center">
-                        <span className="block text-sm font-black text-secondary uppercase tracking-widest">{station.day}</span>
-                        <div className="w-2 h-2 bg-gray-200 rounded-full mx-auto mt-2" />
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -3002,6 +3132,109 @@ const AlunosPaisPage = () => {
                 </div>
               </div>
             </main>
+
+            {/* Activity Modal */}
+            <AnimatePresence>
+              {isActivityModalOpen && selectedActivity && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsActivityModalOpen(false)}
+                    className="absolute inset-0 bg-secondary/80 backdrop-blur-md"
+                  />
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    className="bg-white w-full max-w-4xl rounded-[48px] overflow-hidden shadow-2xl relative z-10 flex flex-col md:flex-row h-[90vh] md:h-auto max-h-[90vh]"
+                  >
+                    {/* Left: Media/Content */}
+                    <div className="w-full md:w-1/2 bg-gray-100 relative aspect-video md:aspect-auto">
+                      {selectedActivity.tipo_recurso === 'video' ? (
+                        <iframe 
+                          src={selectedActivity.url_recurso}
+                          className="w-full h-full object-cover"
+                          allow="autoplay; encrypted-media"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <img 
+                          src={selectedActivity.capa_url || "https://picsum.photos/seed/activity/800/600"} 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      )}
+                      <div className="absolute top-6 left-6 bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-lg">
+                        <span className="text-xs font-black text-secondary uppercase tracking-widest flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-primary" /> {selectedActivity.tipo_recurso}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Right: Info & Action */}
+                    <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col">
+                      <div className="flex justify-between items-start mb-8">
+                        <div>
+                          <h3 className="text-3xl font-black text-secondary tracking-tighter mb-2">{selectedActivity.titulo}</h3>
+                          <div className="flex items-center gap-2">
+                            <span className="px-3 py-1 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest rounded-full">
+                              {selectedActivity.nivel}
+                            </span>
+                            <span className="px-3 py-1 bg-secondary/5 text-secondary/40 text-[10px] font-black uppercase tracking-widest rounded-full">
+                              {selectedActivity.categoria}
+                            </span>
+                          </div>
+                        </div>
+                        <button onClick={() => setIsActivityModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-all">
+                          <X className="w-6 h-6 text-secondary/40" />
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto pr-4 space-y-6 mb-8">
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-black text-secondary/40 uppercase tracking-widest">Descrição da Atividade</h4>
+                          <p className="text-secondary/70 font-medium leading-relaxed">{selectedActivity.descricao}</p>
+                        </div>
+
+                        {selectedActivity.tipo_recurso === 'documento' && (
+                          <a 
+                            href={selectedActivity.url_recurso} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 hover:border-primary hover:bg-primary/5 transition-all group"
+                          >
+                            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-secondary group-hover:text-primary shadow-sm">
+                              <FileText className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <p className="font-black text-secondary text-sm">Ver Material de Apoio</p>
+                              <p className="text-[10px] text-secondary/40 font-bold uppercase">Clique para abrir o PDF</p>
+                            </div>
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="space-y-4">
+                        <button 
+                          onClick={() => {
+                            handleCompleteActivity(selectedActivity.id, selectedActivity.tipo);
+                            setIsActivityModalOpen(false);
+                          }}
+                          className="w-full py-5 bg-primary text-white rounded-3xl font-black text-lg uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-3"
+                        >
+                          <CheckCircle2 className="w-6 h-6" /> Concluir Atividade
+                        </button>
+                        <p className="text-center text-[10px] text-secondary/30 font-black uppercase tracking-widest">
+                          Ao concluir, você ganhará 100 pontos de XP!
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
 
@@ -3213,30 +3446,34 @@ const AlunosPaisPage = () => {
                 <div className="space-y-8 relative">
                   <div className="absolute left-6 top-0 bottom-0 w-1 bg-gray-100 -z-10" />
                   
-                  {[
-                    { id: 'historia', label: 'História (Seg)', icon: BookOpen, unlocked: loopConfig?.historia_desbloqueada },
-                    { id: 'jogo', label: 'Jogo (Ter)', icon: Gamepad2, unlocked: loopConfig?.jogo_desbloqueado },
-                    { id: 'tarefa', label: 'Tarefa (Qua)', icon: Pencil, unlocked: loopConfig?.tarefa_desbloqueada },
-                    { id: 'missao', label: 'Missão (Sex)', icon: Target, unlocked: loopConfig?.missao_sexta_desbloqueada },
-                  ].map((step) => (
-                    <div key={step.id} className="flex items-center gap-6">
-                      <div className={cn(
-                        "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg",
-                        step.unlocked ? "bg-primary text-white" : "bg-white text-gray-200 border-2 border-gray-100"
-                      )}>
-                        <step.icon className="w-6 h-6" />
+                  {WEEKLY_STATIONS.map((station) => {
+                    const status = getStationStatus(station.id);
+                    const isUnlocked = status !== 'locked';
+                    
+                    return (
+                      <div key={station.id} className="flex items-center gap-6">
+                        <div className={cn(
+                          "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg",
+                          isUnlocked ? "bg-primary text-white" : "bg-white text-gray-200 border-2 border-gray-100"
+                        )}>
+                          <station.icon className="w-6 h-6" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className={cn("font-black uppercase tracking-widest text-xs", isUnlocked ? "text-secondary" : "text-gray-300")}>
+                            {station.label} ({station.day})
+                          </h4>
+                          <p className="text-[10px] font-bold text-secondary/40">
+                            {status === 'completed' ? "Atividade Concluída" :
+                             status === 'available' ? "Disponível para o Aluno" :
+                             status === 'scheduled' ? `Agendado: ${new Date(loopConfig[`${station.id}_agendamento`]).toLocaleString()}` :
+                             "Aguardando Liberação"}
+                          </p>
+                        </div>
+                        {status === 'completed' && <CheckCircle2 className="w-5 h-5 text-success" />}
+                        {status === 'scheduled' && <Clock className="w-4 h-4 text-primary/40" />}
                       </div>
-                      <div className="flex-1">
-                        <h4 className={cn("font-black uppercase tracking-widest text-xs", step.unlocked ? "text-secondary" : "text-gray-300")}>
-                          {step.label}
-                        </h4>
-                        <p className="text-[10px] font-bold text-secondary/40">
-                          {step.unlocked ? "Desbloqueado pelo Tutor" : "Aguardando Tutor"}
-                        </p>
-                      </div>
-                      {step.unlocked && <CheckCircle2 className="w-5 h-5 text-success" />}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -3402,6 +3639,11 @@ const TutoresPage = () => {
   });
   const [selectedStudentReports, setSelectedStudentReports] = useState<any[]>([]);
   const [selectedStudentReflections, setSelectedStudentReflections] = useState<any[]>([]);
+  const [activityExecutions, setActivityExecutions] = useState<any[]>([]);
+  const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
+  const [selectedExecution, setSelectedExecution] = useState<any>(null);
+  const [evaluationPoints, setEvaluationPoints] = useState(0);
+  const [evaluationFeedback, setEvaluationFeedback] = useState('');
   const [isSavingMetrics, setIsSavingMetrics] = useState(false);
   const [metrics, setMetrics] = useState({
     oralidade: 0,
@@ -3456,20 +3698,39 @@ const TutoresPage = () => {
       }
 
       const { data, error } = await query.eq('semana_referencia', mondayStr).maybeSingle();
+      
+      let activeConfig = data;
 
-      if (data) {
+      // Se selecionou um aluno e não tem loop individual (ou está vazio), busca o da turma dele
+      const isConfigEmpty = !activeConfig || (!activeConfig.historia_id && !activeConfig.jogo_id && !activeConfig.tarefa_id && !activeConfig.revisao_id && !activeConfig.missao_id);
+      
+      if (isConfigEmpty && selectedStudent?.turma_id) {
+        const { data: turmaData } = await supabase
+          .from('loops_semanais')
+          .select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)')
+          .eq('turma_id', selectedStudent.turma_id)
+          .eq('semana_referencia', mondayStr)
+          .maybeSingle();
+        
+        // Só usa o da turma se ele tiver conteúdo
+        if (turmaData && (turmaData.historia_id || turmaData.jogo_id || turmaData.tarefa_id || turmaData.revisao_id || turmaData.missao_id)) {
+          activeConfig = turmaData;
+        }
+      }
+
+      if (activeConfig) {
         setWeeklyLoop({
-          historia: data.historia,
-          historia_agendamento: data.historia_agendamento || '',
-          jogo: data.jogo,
-          jogo_agendamento: data.jogo_agendamento || '',
-          tarefa: data.tarefa,
-          tarefa_agendamento: data.tarefa_agendamento || '',
-          revisao: data.revisao,
-          revisao_agendamento: data.revisao_agendamento || '',
-          missao: data.missao,
-          missao_agendamento: data.missao_agendamento || '',
-          liberadoAgora: data.liberacao_manual
+          historia: activeConfig.historia,
+          historia_agendamento: activeConfig.historia_agendamento || '',
+          jogo: activeConfig.jogo,
+          jogo_agendamento: activeConfig.jogo_agendamento || '',
+          tarefa: activeConfig.tarefa,
+          tarefa_agendamento: activeConfig.tarefa_agendamento || '',
+          revisao: activeConfig.revisao,
+          revisao_agendamento: activeConfig.revisao_agendamento || '',
+          missao: activeConfig.missao,
+          missao_agendamento: activeConfig.missao_agendamento || '',
+          liberadoAgora: activeConfig.liberacao_manual
         });
       } else {
         setWeeklyLoop({
@@ -3502,7 +3763,7 @@ const TutoresPage = () => {
       const mondayStr = monday.toISOString().split('T')[0];
 
       const payload = {
-        turma_id: selectedTurma?.id || null,
+        turma_id: selectedStudent ? null : (selectedTurma?.id || null),
         aluno_id: selectedStudent?.id || null,
         semana_referencia: mondayStr,
         historia_id: updatedLoop.historia?.id || null,
@@ -3519,8 +3780,9 @@ const TutoresPage = () => {
       };
 
       let query = supabase.from('loops_semanais').select('id');
-      if (selectedTurma) query = query.eq('turma_id', selectedTurma.id);
-      else query = query.eq('aluno_id', selectedStudent.id);
+      if (selectedStudent) query = query.eq('aluno_id', selectedStudent.id);
+      else if (selectedTurma) query = query.eq('turma_id', selectedTurma.id);
+      else return;
       
       const { data: existing } = await query.eq('semana_referencia', mondayStr).maybeSingle();
 
@@ -3545,6 +3807,52 @@ const TutoresPage = () => {
       if (data) setBiblioteca(data);
     } catch (err) {
       console.error('Error fetching library:', err);
+    }
+  };
+
+  const fetchActivityExecutions = async (alunoId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('execucoes_atividades')
+        .select('*, recurso:recurso_id(*)')
+        .eq('aluno_id', alunoId)
+        .order('criado_em', { ascending: false });
+      
+      if (error) throw error;
+      setActivityExecutions(data || []);
+    } catch (err) {
+      console.error('Error fetching executions:', err);
+    }
+  };
+
+  const handleSaveEvaluation = async () => {
+    if (!selectedExecution) return;
+    setIsSavingMetrics(true);
+    try {
+      const { error } = await supabase
+        .from('execucoes_atividades')
+        .update({
+          pontos: evaluationPoints,
+          feedback_tutor: evaluationFeedback,
+          status: 'avaliado',
+          avaliado_em: new Date().toISOString()
+        })
+        .eq('id', selectedExecution.id);
+
+      if (error) throw error;
+      
+      // Update local state
+      setActivityExecutions(prev => prev.map(ex => 
+        ex.id === selectedExecution.id 
+          ? { ...ex, pontos: evaluationPoints, feedback_tutor: evaluationFeedback, status: 'avaliado' }
+          : ex
+      ));
+      
+      setIsEvaluationModalOpen(false);
+    } catch (err) {
+      console.error('Error saving evaluation:', err);
+    } finally {
+      setIsSavingMetrics(false);
     }
   };
 
@@ -3602,8 +3910,10 @@ const TutoresPage = () => {
   useEffect(() => {
     if (selectedStudent) {
       fetchStudentReports(selectedStudent.id);
+      fetchActivityExecutions(selectedStudent.id);
     } else {
       setSelectedStudentReports([]);
+      setActivityExecutions([]);
     }
   }, [selectedStudent]);
 
@@ -4396,6 +4706,61 @@ const TutoresPage = () => {
                       </form>
 
                       {/* Reflections History */}
+                      {/* Activity Evaluations Section */}
+                      <div className="pt-10 border-t border-gray-50 space-y-6">
+                        <h4 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4" /> Atividades Realizadas
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {activityExecutions.length > 0 ? activityExecutions.map((exec) => (
+                            <div key={exec.id} className="p-6 bg-gray-50 rounded-3xl border border-gray-100 space-y-4">
+                              <div className="flex justify-between items-start">
+                                <div className="space-y-1">
+                                  <span className="text-[8px] font-black uppercase tracking-widest text-primary bg-primary/5 px-2 py-1 rounded-md">
+                                    {exec.tipo_etapa}
+                                  </span>
+                                  <h5 className="text-sm font-black text-secondary">{exec.recurso?.titulo}</h5>
+                                </div>
+                                <div className={cn(
+                                  "px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest",
+                                  exec.status === 'avaliado' ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+                                )}>
+                                  {exec.status === 'avaliado' ? 'Avaliado' : 'Pendente'}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-primary shadow-sm">
+                                    <Star className="w-4 h-4 fill-current" />
+                                  </div>
+                                  <div>
+                                    <p className="text-[8px] font-black uppercase tracking-widest text-secondary/40">Pontos</p>
+                                    <p className="text-xs font-black text-secondary">{exec.pontos || 0}</p>
+                                  </div>
+                                </div>
+                                <button 
+                                  onClick={() => {
+                                    setSelectedExecution(exec);
+                                    setEvaluationPoints(exec.pontos || 0);
+                                    setEvaluationFeedback(exec.feedback_tutor || '');
+                                    setIsEvaluationModalOpen(true);
+                                  }}
+                                  className="px-4 py-2 bg-white border border-gray-100 rounded-xl text-[9px] font-black uppercase tracking-widest text-secondary hover:bg-primary hover:text-white hover:border-primary transition-all"
+                                >
+                                  {exec.status === 'avaliado' ? 'Editar Nota' : 'Avaliar'}
+                                </button>
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="col-span-full py-12 text-center bg-gray-50 rounded-3xl border border-dashed border-gray-200">
+                              <Package className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                              <p className="text-secondary/40 font-bold uppercase tracking-widest text-[10px]">Nenhuma atividade realizada ainda</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
                       {selectedStudentReflections.length > 0 && (
                         <div className="pt-10 border-t border-gray-50 space-y-6">
                           <h4 className="text-xs font-black uppercase tracking-widest text-success flex items-center gap-2">
@@ -4917,6 +5282,82 @@ const TutoresPage = () => {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Evaluation Modal */}
+      <AnimatePresence>
+        {isEvaluationModalOpen && selectedExecution && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsEvaluationModalOpen(false)}
+              className="absolute inset-0 bg-secondary/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-lg rounded-[48px] overflow-hidden shadow-2xl relative z-10 p-10 space-y-8"
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-2xl font-black text-secondary">Avaliar Atividade</h3>
+                  <p className="text-xs font-medium text-secondary/40 uppercase tracking-widest">{selectedExecution.recurso?.titulo}</p>
+                </div>
+                <button onClick={() => setIsEvaluationModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-all">
+                  <X className="w-6 h-6 text-secondary/40" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-black uppercase tracking-widest text-secondary/40">Pontuação (Estrelas)</label>
+                    <span className="text-2xl font-black text-primary">{evaluationPoints}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setEvaluationPoints(n)}
+                        className={cn(
+                          "flex-1 aspect-square rounded-xl flex items-center justify-center transition-all",
+                          evaluationPoints >= n ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-gray-50 text-secondary/20 hover:bg-gray-100"
+                        )}
+                      >
+                        <Star className={cn("w-4 h-4", evaluationPoints >= n ? "fill-current" : "")} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-secondary/40">Feedback do Tutor</label>
+                  <textarea 
+                    value={evaluationFeedback}
+                    onChange={(e) => setEvaluationFeedback(e.target.value)}
+                    className="w-full p-6 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-medium h-32"
+                    placeholder="Deixe um comentário motivador para o aluno..."
+                  />
+                </div>
+              </div>
+
+              <button 
+                onClick={handleSaveEvaluation}
+                disabled={isSavingMetrics}
+                className="w-full py-4 bg-secondary text-white rounded-2xl font-black uppercase tracking-widest hover:bg-primary transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-2"
+              >
+                {isSavingMetrics ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>Salvar Avaliação</>
+                )}
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Library Modal */}
       {isLibraryOpen && (
