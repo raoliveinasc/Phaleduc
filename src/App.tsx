@@ -3389,6 +3389,7 @@ const TutoresPage = () => {
     historia: null,
     jogo: null,
     tarefa: null,
+    revisao: null,
     missao: null,
     liberadoAgora: false
   });
@@ -3880,13 +3881,14 @@ const TutoresPage = () => {
                 </div>
               </div>
 
-              {/* 4 Columns Flow */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* 5 Columns Flow */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
                 {[
                   { id: 1, title: 'História', icon: BookOpen, color: 'primary', day: 'Segunda', type: 'historia' },
                   { id: 2, title: 'Jogo', icon: Gamepad2, color: 'success', day: 'Terça', type: 'jogo' },
                   { id: 3, title: 'Tarefa', icon: Mic, color: 'warning', day: 'Quarta', type: 'tarefa' },
-                  { id: 4, title: 'Missão', icon: Package, color: 'secondary', day: 'Sexta', type: 'missao' }
+                  { id: 4, title: 'Revisão', icon: Sparkles, color: 'primary', day: 'Quinta', type: 'revisao' },
+                  { id: 5, title: 'Missão', icon: Package, color: 'secondary', day: 'Sexta', type: 'missao' }
                 ].map((step) => {
                   const resource = weeklyLoop[step.type];
                   return (
@@ -4728,7 +4730,10 @@ const TutoresPage = () => {
                 <button 
                   key={item.id}
                   onClick={() => {
-                    const stepKey = activeStepToAssign === 1 ? 'historia' : activeStepToAssign === 2 ? 'jogo' : activeStepToAssign === 3 ? 'tarefa' : 'missao';
+                    const stepKey = activeStepToAssign === 1 ? 'historia' : 
+                                   activeStepToAssign === 2 ? 'jogo' : 
+                                   activeStepToAssign === 3 ? 'tarefa' : 
+                                   activeStepToAssign === 4 ? 'revisao' : 'missao';
                     setWeeklyLoop({...weeklyLoop, [stepKey]: item});
                     setIsLibraryOpen(false);
                   }}
