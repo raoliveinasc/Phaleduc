@@ -3380,6 +3380,18 @@ const TutoresPage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [tutorStudents, setTutorStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [selectedTurma, setSelectedTurma] = useState<any | null>(null);
+  const [turmas, setTurmas] = useState<any[]>([]);
+  const [biblioteca, setBiblioteca] = useState<any[]>([]);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [activeStepToAssign, setActiveStepToAssign] = useState<number | null>(null);
+  const [weeklyLoop, setWeeklyLoop] = useState<any>({
+    historia: null,
+    jogo: null,
+    tarefa: null,
+    missao: null,
+    liberadoAgora: false
+  });
   const [selectedStudentReports, setSelectedStudentReports] = useState<any[]>([]);
   const [selectedStudentReflections, setSelectedStudentReflections] = useState<any[]>([]);
   const [isSavingMetrics, setIsSavingMetrics] = useState(false);
@@ -3412,12 +3424,29 @@ const TutoresPage = () => {
   }, [isLoggedIn, tutorData]);
 
   const fetchTutorStudents = async () => {
-    const { data, error } = await supabase
-      .from('alunos')
-      .select('*, pais(*)')
-      .eq('tutor_id', tutorData.id);
-    
-    if (data) setTutorStudents(data);
+    try {
+      const { data, error } = await supabase
+        .from('alunos')
+        .select('*, pais(*), turmas(nome)')
+        .eq('tutor_id', tutorData.id);
+      
+      if (data) setTutorStudents(data);
+
+      const { data: turmasData } = await supabase
+        .from('turmas')
+        .select('*')
+        .eq('tutor_id', tutorData.id);
+      
+      if (turmasData) setTurmas(turmasData);
+
+      const { data: recursos } = await supabase
+        .from('biblioteca_recursos')
+        .select('*');
+      
+      if (recursos) setBiblioteca(recursos);
+    } catch (err) {
+      console.error('Error fetching tutor data:', err);
+    }
   };
 
   const getMonday = (d: Date) => {
@@ -3793,6 +3822,7 @@ const TutoresPage = () => {
         <nav className="flex-1 space-y-2">
           <SidebarItem id="dashboard" icon={LayoutDashboard} label="🏠 Início" />
           <SidebarItem id="alunos" icon={Users} label="👥 Meus Alunos" />
+          <SidebarItem id="loop" icon={LayoutDashboard} label="🎯 Loop Semanal" />
           <SidebarItem id="trilha" icon={BookOpen} label="🎓 Certificação" />
           <SidebarItem id="mala-rosa" icon={ShoppingBag} label="🎒 Mala Rosa" />
           <SidebarItem id="comunidade" icon={Coffee} label="🤝 Comunidade" />
@@ -3811,6 +3841,130 @@ const TutoresPage = () => {
       {/* Main Content */}
       <main className="flex-1 p-8 md:p-12 overflow-y-auto max-h-screen">
         <AnimatePresence mode="wait">
+          {activeTab === 'loop' && (
+            <motion.div 
+              key="loop"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-8"
+            >
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm">
+                <div className="space-y-1">
+                  <h3 className="text-xl font-black text-secondary flex items-center gap-3">
+                    <LayoutDashboard className="w-6 h-6 text-primary" /> Painel de Controle de Missões
+                  </h3>
+                  <p className="text-xs font-medium text-secondary/40 uppercase tracking-widest">Orquestração do Loop Semanal</p>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-4">
+                  <select 
+                    onChange={(e) => setSelectedTurma(turmas.find(t => t.id === e.target.value) || null)}
+                    className="px-6 py-3 bg-gray-50 rounded-2xl border-none font-black text-[10px] uppercase tracking-widest text-secondary focus:ring-2 focus:ring-primary/20 transition-all"
+                  >
+                    <option value="">Contexto: Individual</option>
+                    {turmas.map(t => (
+                      <option key={t.id} value={t.id}>Turma: {t.nome}</option>
+                    ))}
+                  </select>
+
+                  <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 rounded-2xl border border-primary/10">
+                    <span className="text-[10px] font-black text-primary uppercase tracking-widest">Liberar Loop Inteiro</span>
+                    <button 
+                      onClick={() => setWeeklyLoop({...weeklyLoop, liberadoAgora: !weeklyLoop.liberadoAgora})}
+                      className={cn("w-12 h-6 rounded-full transition-all relative", weeklyLoop.liberadoAgora ? "bg-success" : "bg-gray-200")}
+                    >
+                      <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all", weeklyLoop.liberadoAgora ? "right-1" : "left-1")} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4 Columns Flow */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {[
+                  { id: 1, title: 'História', icon: BookOpen, color: 'primary', day: 'Segunda', type: 'historia' },
+                  { id: 2, title: 'Jogo', icon: Gamepad2, color: 'success', day: 'Terça', type: 'jogo' },
+                  { id: 3, title: 'Tarefa', icon: Mic, color: 'warning', day: 'Quarta', type: 'tarefa' },
+                  { id: 4, title: 'Missão', icon: Package, color: 'secondary', day: 'Sexta', type: 'missao' }
+                ].map((step) => {
+                  const resource = weeklyLoop[step.type];
+                  return (
+                    <div key={step.id} className="space-y-4">
+                      <div className="flex items-center justify-between px-2">
+                        <div className="flex items-center gap-2">
+                          <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center", step.color === 'primary' ? 'bg-primary/10' : step.color === 'success' ? 'bg-success/10' : step.color === 'warning' ? 'bg-warning/10' : 'bg-secondary/10')}>
+                            <step.icon className={cn("w-4 h-4", step.color === 'primary' ? 'text-primary' : step.color === 'success' ? 'text-success' : step.color === 'warning' ? 'text-warning' : 'text-secondary')} />
+                          </div>
+                          <div>
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary">{step.title}</h4>
+                            <p className="text-[9px] font-bold text-secondary/30 uppercase">{step.day}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={cn(
+                        "min-h-[280px] rounded-[32px] border-2 border-dashed p-4 flex flex-col transition-all",
+                        resource ? "border-primary/20 bg-primary/5" : "border-gray-100 bg-gray-50/50"
+                      )}>
+                        {resource ? (
+                          <div className="flex-1 flex flex-col gap-4">
+                            <div className="relative aspect-video rounded-2xl overflow-hidden bg-white shadow-sm">
+                              <img src={resource.miniatura_url || `https://picsum.photos/seed/${resource.id}/400/225`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                              <button 
+                                onClick={() => setWeeklyLoop({...weeklyLoop, [step.type]: null})}
+                                className="absolute top-2 right-2 w-6 h-6 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/40 transition-all"
+                              >
+                                <X className="w-3 h-3 text-white" />
+                              </button>
+                            </div>
+                            <div className="space-y-1">
+                              <h5 className="text-xs font-black text-secondary line-clamp-1">{resource.titulo}</h5>
+                              <p className="text-[10px] text-secondary/50 line-clamp-2 leading-relaxed">{resource.descricao}</p>
+                            </div>
+                            
+                            <div className="mt-auto space-y-3">
+                              <button className={cn(
+                                "w-full py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all",
+                                weeklyLoop.liberadoAgora ? "bg-success text-white" : "bg-primary text-white"
+                              )}>
+                                <Calendar className="w-3 h-3" /> {weeklyLoop.liberadoAgora ? 'Liberado' : 'Agendar'}
+                              </button>
+                              
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-secondary/30">
+                                  <span>Progresso</span>
+                                  <span>65%</span>
+                                </div>
+                                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                  <div className="h-full bg-primary transition-all" style={{ width: '65%' }} />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={() => {
+                              setActiveStepToAssign(step.id);
+                              setIsLibraryOpen(true);
+                            }}
+                            className="flex-1 flex flex-col items-center justify-center gap-3 group"
+                          >
+                            <div className="w-12 h-12 rounded-2xl bg-white border border-gray-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-all">
+                              <Plus className="w-5 h-5 text-secondary/20" />
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-secondary/20">Atribuir Recurso</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === 'alunos' && (
             <motion.div 
               key="alunos"
@@ -4550,6 +4704,60 @@ const TutoresPage = () => {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Library Modal */}
+      {isLibraryOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-secondary/80 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white w-full max-w-4xl rounded-[48px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+          >
+            <div className="p-8 border-b border-gray-100 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black text-secondary">Biblioteca de Recursos</h3>
+                <p className="text-xs font-medium text-secondary/40 uppercase tracking-widest">Selecione o conteúdo para a etapa</p>
+              </div>
+              <button onClick={() => setIsLibraryOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-all">
+                <X className="w-6 h-6 text-secondary/40" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+              {biblioteca.length > 0 ? biblioteca.map((item) => (
+                <button 
+                  key={item.id}
+                  onClick={() => {
+                    const stepKey = activeStepToAssign === 1 ? 'historia' : activeStepToAssign === 2 ? 'jogo' : activeStepToAssign === 3 ? 'tarefa' : 'missao';
+                    setWeeklyLoop({...weeklyLoop, [stepKey]: item});
+                    setIsLibraryOpen(false);
+                  }}
+                  className="group text-left space-y-3"
+                >
+                  <div className="aspect-video rounded-3xl overflow-hidden bg-gray-100 relative">
+                    <img src={item.miniatura_url || `https://picsum.photos/seed/${item.id}/400/225`} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" referrerPolicy="no-referrer" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                      <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all">
+                        <Plus className="w-5 h-5 text-primary" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="px-2">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-primary bg-primary/5 px-2 py-1 rounded-md">{item.tipo}</span>
+                    <h5 className="text-sm font-black text-secondary mt-1">{item.titulo}</h5>
+                    <p className="text-xs text-secondary/40 line-clamp-2 mt-1">{item.descricao}</p>
+                  </div>
+                </button>
+              )) : (
+                <div className="col-span-full py-20 text-center">
+                  <Package className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                  <p className="text-secondary/40 font-bold uppercase tracking-widest text-xs">Nenhum recurso na biblioteca</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
