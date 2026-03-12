@@ -3389,10 +3389,15 @@ const TutoresPage = () => {
   const [libraryFilter, setLibraryFilter] = useState('all');
   const [weeklyLoop, setWeeklyLoop] = useState<any>({
     historia: null,
+    historia_agendamento: '',
     jogo: null,
+    jogo_agendamento: '',
     tarefa: null,
+    tarefa_agendamento: '',
     revisao: null,
+    revisao_agendamento: '',
     missao: null,
+    missao_agendamento: '',
     liberadoAgora: false
   });
   const [selectedStudentReports, setSelectedStudentReports] = useState<any[]>([]);
@@ -3455,19 +3460,29 @@ const TutoresPage = () => {
       if (data) {
         setWeeklyLoop({
           historia: data.historia,
+          historia_agendamento: data.historia_agendamento || '',
           jogo: data.jogo,
+          jogo_agendamento: data.jogo_agendamento || '',
           tarefa: data.tarefa,
+          tarefa_agendamento: data.tarefa_agendamento || '',
           revisao: data.revisao,
+          revisao_agendamento: data.revisao_agendamento || '',
           missao: data.missao,
+          missao_agendamento: data.missao_agendamento || '',
           liberadoAgora: data.liberacao_manual
         });
       } else {
         setWeeklyLoop({
           historia: null,
+          historia_agendamento: '',
           jogo: null,
+          jogo_agendamento: '',
           tarefa: null,
+          tarefa_agendamento: '',
           revisao: null,
+          revisao_agendamento: '',
           missao: null,
+          missao_agendamento: '',
           liberadoAgora: false
         });
       }
@@ -3491,10 +3506,15 @@ const TutoresPage = () => {
         aluno_id: selectedStudent?.id || null,
         semana_referencia: mondayStr,
         historia_id: updatedLoop.historia?.id || null,
+        historia_agendamento: updatedLoop.historia_agendamento || null,
         jogo_id: updatedLoop.jogo?.id || null,
+        jogo_agendamento: updatedLoop.jogo_agendamento || null,
         tarefa_id: updatedLoop.tarefa?.id || null,
+        tarefa_agendamento: updatedLoop.tarefa_agendamento || null,
         revisao_id: updatedLoop.revisao?.id || null,
+        revisao_agendamento: updatedLoop.revisao_agendamento || null,
         missao_id: updatedLoop.missao?.id || null,
+        missao_agendamento: updatedLoop.missao_agendamento || null,
         liberacao_manual: updatedLoop.liberadoAgora
       };
 
@@ -4065,14 +4085,20 @@ const TutoresPage = () => {
                               <img src={resource.miniatura_url || `https://picsum.photos/seed/${resource.id}/400/225`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                               <button 
-                                onClick={() => {
-                                  const newLoop = {...weeklyLoop, [step.type]: null};
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newLoop = {
+                                    ...weeklyLoop, 
+                                    [step.type]: null,
+                                    [`${step.type}_agendamento`]: ''
+                                  };
                                   setWeeklyLoop(newLoop);
                                   saveWeeklyLoop(newLoop);
                                 }}
-                                className="absolute top-2 right-2 w-6 h-6 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/40 transition-all"
+                                className="absolute top-2 right-2 w-8 h-8 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/40 transition-all z-10"
+                                title="Remover atividade"
                               >
-                                <X className="w-3 h-3 text-white" />
+                                <X className="w-4 h-4 text-white" />
                               </button>
                             </div>
                             <div className="space-y-1">
@@ -4081,6 +4107,20 @@ const TutoresPage = () => {
                             </div>
                             
                             <div className="mt-auto space-y-3">
+                              <div className="space-y-1">
+                                <label className="text-[8px] font-black uppercase tracking-widest text-secondary/40 px-1">Agendar para:</label>
+                                <input 
+                                  type="datetime-local"
+                                  value={weeklyLoop[`${step.type}_agendamento`] || ''}
+                                  onChange={(e) => {
+                                    const newLoop = {...weeklyLoop, [`${step.type}_agendamento`]: e.target.value};
+                                    setWeeklyLoop(newLoop);
+                                    saveWeeklyLoop(newLoop);
+                                  }}
+                                  className="w-full px-3 py-2 bg-white border border-gray-100 rounded-xl text-[10px] font-bold text-secondary focus:ring-2 focus:ring-primary/20 transition-all"
+                                />
+                              </div>
+
                               <button 
                                 onClick={() => {
                                   const newLoop = {...weeklyLoop, liberadoAgora: !weeklyLoop.liberadoAgora};
