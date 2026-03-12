@@ -4081,10 +4081,17 @@ const TutoresPage = () => {
                             </div>
                             
                             <div className="mt-auto space-y-3">
-                              <button className={cn(
-                                "w-full py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all",
-                                weeklyLoop.liberadoAgora ? "bg-success text-white" : "bg-primary text-white"
-                              )}>
+                              <button 
+                                onClick={() => {
+                                  const newLoop = {...weeklyLoop, liberadoAgora: !weeklyLoop.liberadoAgora};
+                                  setWeeklyLoop(newLoop);
+                                  saveWeeklyLoop(newLoop);
+                                }}
+                                className={cn(
+                                  "w-full py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all",
+                                  weeklyLoop.liberadoAgora ? "bg-success text-white" : "bg-primary text-white"
+                                )}
+                              >
                                 <Calendar className="w-3 h-3" /> {weeklyLoop.liberadoAgora ? 'Liberado' : 'Agendar'}
                               </button>
                               
