@@ -3424,6 +3424,94 @@ const TutoresPage = () => {
     }
   }, [isLoggedIn, tutorData]);
 
+  useEffect(() => {
+    if (activeTab === 'loop' && (selectedTurma || selectedStudent)) {
+      fetchWeeklyLoop();
+    }
+  }, [activeTab, selectedTurma, selectedStudent]);
+
+  const fetchWeeklyLoop = async () => {
+    try {
+      const now = new Date();
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(now.setDate(diff));
+      const mondayStr = monday.toISOString().split('T')[0];
+
+      let query = supabase.from('loops_semanais').select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)');
+      
+      if (selectedTurma) {
+        query = query.eq('turma_id', selectedTurma.id);
+      } else if (selectedStudent) {
+        query = query.eq('aluno_id', selectedStudent.id);
+      } else {
+        return;
+      }
+
+      const { data, error } = await query.eq('semana_referencia', mondayStr).maybeSingle();
+
+      if (data) {
+        setWeeklyLoop({
+          historia: data.historia,
+          jogo: data.jogo,
+          tarefa: data.tarefa,
+          revisao: data.revisao,
+          missao: data.missao,
+          liberadoAgora: data.liberacao_manual
+        });
+      } else {
+        setWeeklyLoop({
+          historia: null,
+          jogo: null,
+          tarefa: null,
+          revisao: null,
+          missao: null,
+          liberadoAgora: false
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching weekly loop:', err);
+    }
+  };
+
+  const saveWeeklyLoop = async (updatedLoop: any) => {
+    if (!selectedTurma && !selectedStudent) return;
+
+    try {
+      const now = new Date();
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(now.setDate(diff));
+      const mondayStr = monday.toISOString().split('T')[0];
+
+      const payload = {
+        turma_id: selectedTurma?.id || null,
+        aluno_id: selectedStudent?.id || null,
+        semana_referencia: mondayStr,
+        historia_id: updatedLoop.historia?.id || null,
+        jogo_id: updatedLoop.jogo?.id || null,
+        tarefa_id: updatedLoop.tarefa?.id || null,
+        revisao_id: updatedLoop.revisao?.id || null,
+        missao_id: updatedLoop.missao?.id || null,
+        liberacao_manual: updatedLoop.liberadoAgora
+      };
+
+      let query = supabase.from('loops_semanais').select('id');
+      if (selectedTurma) query = query.eq('turma_id', selectedTurma.id);
+      else query = query.eq('aluno_id', selectedStudent.id);
+      
+      const { data: existing } = await query.eq('semana_referencia', mondayStr).maybeSingle();
+
+      if (existing) {
+        await supabase.from('loops_semanais').update(payload).eq('id', existing.id);
+      } else {
+        await supabase.from('loops_semanais').insert([payload]);
+      }
+    } catch (err) {
+      console.error('Error saving weekly loop:', err);
+    }
+  };
+
   const fetchTutorStudents = async () => {
     try {
       const { data, error } = await supabase
@@ -3853,26 +3941,62 @@ const TutoresPage = () => {
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm">
                 <div className="space-y-1">
                   <h3 className="text-xl font-black text-secondary flex items-center gap-3">
-                    <LayoutDashboard className="w-6 h-6 text-primary" /> Painel de Controle de Missões
+                    <LayoutDashboard className="w-6 h-6 text-primary" /> 
+                    {selectedTurma ? `Turma: ${selectedTurma.nome}` : selectedStudent ? `Aluno: ${selectedStudent.nome}` : 'Painel de Controle de Missões'}
                   </h3>
-                  <p className="text-xs font-medium text-secondary/40 uppercase tracking-widest">Orquestração do Loop Semanal</p>
+                  <p className="text-xs font-medium text-secondary/40 uppercase tracking-widest">
+                    {selectedTurma || selectedStudent ? 'Orquestração do Loop Semanal' : 'Selecione uma turma ou aluno para começar'}
+                  </p>
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-4">
-                  <select 
-                    onChange={(e) => setSelectedTurma(turmas.find(t => t.id === e.target.value) || null)}
-                    className="px-6 py-3 bg-gray-50 rounded-2xl border-none font-black text-[10px] uppercase tracking-widest text-secondary focus:ring-2 focus:ring-primary/20 transition-all"
-                  >
-                    <option value="">Contexto: Individual</option>
-                    {turmas.map(t => (
-                      <option key={t.id} value={t.id}>Turma: {t.nome}</option>
-                    ))}
-                  </select>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-2">Contexto de Atribuição</span>
+                    <select 
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val.startsWith('turma:')) {
+                          const t = turmas.find(t => t.id === val.replace('turma:', ''));
+                          setSelectedTurma(t || null);
+                          setSelectedStudent(null);
+                        } else if (val.startsWith('aluno:')) {
+                          const s = tutorStudents.find(s => s.id === val.replace('aluno:', ''));
+                          setSelectedStudent(s || null);
+                          setSelectedTurma(null);
+                        } else {
+                          setSelectedTurma(null);
+                          setSelectedStudent(null);
+                        }
+                      }}
+                      className="px-6 py-3 bg-gray-50 rounded-2xl border-none font-black text-[10px] uppercase tracking-widest text-secondary focus:ring-2 focus:ring-primary/20 transition-all min-w-[240px]"
+                      value={selectedTurma ? `turma:${selectedTurma.id}` : selectedStudent ? `aluno:${selectedStudent.id}` : ''}
+                    >
+                      <option value="">Selecione Turma ou Aluno</option>
+                      {turmas.length > 0 && (
+                        <optgroup label="Turmas">
+                          {turmas.map(t => (
+                            <option key={t.id} value={`turma:${t.id}`}>Turma: {t.nome}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {tutorStudents.length > 0 && (
+                        <optgroup label="Alunos Individuais">
+                          {tutorStudents.map(s => (
+                            <option key={s.id} value={`aluno:${s.id}`}>Aluno: {s.nome}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
 
-                  <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 rounded-2xl border border-primary/10">
+                  <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 rounded-2xl border border-primary/10 mt-4 md:mt-0">
                     <span className="text-[10px] font-black text-primary uppercase tracking-widest">Liberar Loop Inteiro</span>
                     <button 
-                      onClick={() => setWeeklyLoop({...weeklyLoop, liberadoAgora: !weeklyLoop.liberadoAgora})}
+                      onClick={() => {
+                        const newLoop = {...weeklyLoop, liberadoAgora: !weeklyLoop.liberadoAgora};
+                        setWeeklyLoop(newLoop);
+                        saveWeeklyLoop(newLoop);
+                      }}
                       className={cn("w-12 h-6 rounded-full transition-all relative", weeklyLoop.liberadoAgora ? "bg-success" : "bg-gray-200")}
                     >
                       <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all", weeklyLoop.liberadoAgora ? "right-1" : "left-1")} />
@@ -3882,7 +4006,21 @@ const TutoresPage = () => {
               </div>
 
               {/* 5 Columns Flow */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+              <div className={cn(
+                "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 relative",
+                (!selectedTurma && !selectedStudent) && "opacity-50 pointer-events-none"
+              )}>
+                {(!selectedTurma && !selectedStudent) && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/40 backdrop-blur-[2px] rounded-[40px]">
+                    <div className="bg-white p-8 rounded-3xl shadow-xl text-center space-y-4 border border-gray-100">
+                      <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-primary mx-auto">
+                        <Users className="w-8 h-8" />
+                      </div>
+                      <h4 className="text-xl font-black text-secondary">Selecione um Contexto</h4>
+                      <p className="text-sm text-secondary/60 font-medium max-w-[240px]">Escolha uma turma ou um aluno individual para gerenciar as atividades da semana.</p>
+                    </div>
+                  </div>
+                )}
                 {[
                   { id: 1, title: 'História', icon: BookOpen, color: 'primary', day: 'Segunda', type: 'historia' },
                   { id: 2, title: 'Jogo', icon: Gamepad2, color: 'success', day: 'Terça', type: 'jogo' },
@@ -3915,7 +4053,11 @@ const TutoresPage = () => {
                               <img src={resource.miniatura_url || `https://picsum.photos/seed/${resource.id}/400/225`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                               <button 
-                                onClick={() => setWeeklyLoop({...weeklyLoop, [step.type]: null})}
+                                onClick={() => {
+                                  const newLoop = {...weeklyLoop, [step.type]: null};
+                                  setWeeklyLoop(newLoop);
+                                  saveWeeklyLoop(newLoop);
+                                }}
                                 className="absolute top-2 right-2 w-6 h-6 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center hover:bg-white/40 transition-all"
                               >
                                 <X className="w-3 h-3 text-white" />
@@ -4734,7 +4876,9 @@ const TutoresPage = () => {
                                    activeStepToAssign === 2 ? 'jogo' : 
                                    activeStepToAssign === 3 ? 'tarefa' : 
                                    activeStepToAssign === 4 ? 'revisao' : 'missao';
-                    setWeeklyLoop({...weeklyLoop, [stepKey]: item});
+                    const newLoop = {...weeklyLoop, [stepKey]: item};
+                    setWeeklyLoop(newLoop);
+                    saveWeeklyLoop(newLoop);
                     setIsLibraryOpen(false);
                   }}
                   className="group text-left space-y-3"
