@@ -96,8 +96,52 @@ CREATE TABLE IF NOT EXISTS loop_semanal_config (
     missao_sexta_desbloqueada BOOLEAN DEFAULT FALSE,
     missao_titulo TEXT,
     missao_prompt TEXT,
+    revisao_desbloqueada BOOLEAN DEFAULT TRUE,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(aluno_id, semana_inicio)
+);
+
+-- Tabela de Turmas
+CREATE TABLE IF NOT EXISTS turmas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nome TEXT NOT NULL,
+    nivel TEXT, -- Iniciante, Intermediário, etc
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Biblioteca de Recursos
+CREATE TABLE IF NOT EXISTS biblioteca_recursos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    titulo TEXT NOT NULL,
+    descricao TEXT,
+    tipo_recurso TEXT NOT NULL, -- video, documento, link
+    url_recurso TEXT NOT NULL,
+    capa_url TEXT,
+    nivel TEXT,
+    categoria TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Loops Semanais (Conteúdo da Trilha)
+CREATE TABLE IF NOT EXISTS loops_semanais (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    turma_id UUID REFERENCES turmas(id) ON DELETE CASCADE,
+    aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
+    semana_referencia DATE NOT NULL,
+    historia_id UUID REFERENCES biblioteca_recursos(id),
+    historia_agendamento TIMESTAMP WITH TIME ZONE,
+    jogo_id UUID REFERENCES biblioteca_recursos(id),
+    jogo_agendamento TIMESTAMP WITH TIME ZONE,
+    tarefa_id UUID REFERENCES biblioteca_recursos(id),
+    tarefa_agendamento TIMESTAMP WITH TIME ZONE,
+    revisao_id UUID REFERENCES biblioteca_recursos(id),
+    revisao_agendamento TIMESTAMP WITH TIME ZONE,
+    missao_id UUID REFERENCES biblioteca_recursos(id),
+    missao_agendamento TIMESTAMP WITH TIME ZONE,
+    liberacao_manual BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(turma_id, aluno_id, semana_referencia)
 );
 
 -- Tabela para as missões de casa culturais

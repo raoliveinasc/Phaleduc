@@ -73,7 +73,8 @@ import {
   ShoppingCart,
   PlusCircle,
   MinusCircle,
-  Trash2
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -2480,9 +2481,11 @@ const AlunosPaisPage = () => {
   };
 
   useEffect(() => {
-    const id = view === 'child' ? selectedChild?.id : activeChildId;
-    if (id) {
-      fetchChildData(id);
+    if (view === 'child') {
+      const id = selectedChild?.id || activeChildId;
+      if (id) {
+        fetchChildData(id);
+      }
     }
   }, [view, selectedChild?.id, activeChildId]);
 
@@ -2508,9 +2511,9 @@ const AlunosPaisPage = () => {
       .from('metricas_progresso')
       .select('*')
       .eq('aluno_id', childId)
-      .order('data_avaliacao', { ascending: false })
+      .order('semana_inicio', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
     
     if (metrics) {
       // Transformar N0-N4 em porcentagem (N4 = 100%, N3 = 75%, etc)
@@ -2535,7 +2538,7 @@ const AlunosPaisPage = () => {
       .from('feedbacks_pedagogicos')
       .select('*')
       .eq('aluno_id', childId)
-      .order('created_at', { ascending: false });
+      .order('semana_inicio', { ascending: false });
     
     if (feedbacks) setChildFeedback(feedbacks);
 
@@ -2555,7 +2558,7 @@ const AlunosPaisPage = () => {
 
     // Se não encontrar ou se o config individual estiver vazio, tenta buscar pela turma do aluno
     if (isConfigEmpty) {
-      const { data: student } = await supabase.from('alunos').select('turma_id').eq('id', childId).single();
+      const { data: student } = await supabase.from('alunos').select('turma_id').eq('id', childId).maybeSingle();
       if (student?.turma_id) {
         const { data: turmaConfig } = await supabase
           .from('loops_semanais')
@@ -2570,8 +2573,24 @@ const AlunosPaisPage = () => {
         }
       }
     }
+
+    // Buscar configurações extras (missão, desbloqueios)
+    const { data: extraConfig } = await supabase
+      .from('loop_semanal_config')
+      .select('*')
+      .eq('aluno_id', childId)
+      .eq('semana_inicio', mondayStr)
+      .maybeSingle();
     
-    if (config) setLoopConfig(config);
+    if (config) {
+      if (extraConfig) {
+        setLoopConfig({ ...config, ...extraConfig });
+      } else {
+        setLoopConfig(config);
+      }
+    } else if (extraConfig) {
+      setLoopConfig(extraConfig);
+    }
 
     // 4. Buscar execuções
     const { data: executions } = await supabase
@@ -2586,7 +2605,12 @@ const AlunosPaisPage = () => {
     if (!loopConfig) return 'locked';
     
     const resource = loopConfig[stationId];
-    if (!resource) return 'locked';
+    // Se for missão, pode não ter recurso mas ter título/prompt
+    if (!resource && stationId !== 'missao') return 'locked';
+
+    // Verificar se está desbloqueado pelo tutor (se houver essa config)
+    const unlockKey = stationId === 'missao' ? 'missao_sexta_desbloqueada' : `${stationId}_desbloqueada`;
+    if (loopConfig[unlockKey] === false) return 'locked';
 
     // Check scheduling
     const agendamento = loopConfig[`${stationId}_agendamento`];
@@ -3657,6 +3681,7 @@ const TutoresPage = () => {
     historiaDesbloqueada: true,
     jogoDesbloqueado: true,
     tarefaDesbloqueada: true,
+    revisaoDesbloqueada: true,
     missaoSextaDesbloqueada: true
   });
   const [email, setEmail] = useState('');
@@ -3719,6 +3744,14 @@ const TutoresPage = () => {
       }
 
       if (activeConfig) {
+        // Buscar também as configs extras (missão, desbloqueios)
+        const { data: extraConfig } = await supabase
+          .from('loop_semanal_config')
+          .select('*')
+          .eq('aluno_id', selectedStudent?.id)
+          .eq('semana_inicio', mondayStr)
+          .maybeSingle();
+
         setWeeklyLoop({
           historia: activeConfig.historia,
           historia_agendamento: activeConfig.historia_agendamento || '',
@@ -3732,6 +3765,18 @@ const TutoresPage = () => {
           missao_agendamento: activeConfig.missao_agendamento || '',
           liberadoAgora: activeConfig.liberacao_manual
         });
+        if (extraConfig) {
+          setMetrics(prev => ({
+            ...prev,
+            missaoSextaDesbloqueada: extraConfig.missao_sexta_desbloqueada,
+            missaoTitulo: extraConfig.missao_titulo,
+            missaoPrompt: extraConfig.missao_prompt,
+            historiaDesbloqueada: extraConfig.historia_desbloqueada,
+            jogoDesbloqueado: extraConfig.jogo_desbloqueado,
+            tarefaDesbloqueada: extraConfig.tarefa_desbloqueada,
+            revisaoDesbloqueada: extraConfig.revisao_desbloqueada ?? true,
+          }));
+        }
       } else {
         setWeeklyLoop({
           historia: null,
@@ -3962,6 +4007,7 @@ const TutoresPage = () => {
           historia_desbloqueada: metrics.historiaDesbloqueada,
           jogo_desbloqueado: metrics.jogoDesbloqueado,
           tarefa_desbloqueada: metrics.tarefaDesbloqueada,
+          revisao_desbloqueada: metrics.revisaoDesbloqueada,
           missao_sexta_desbloqueada: metrics.missaoSextaDesbloqueada,
           missao_titulo: metrics.missaoTitulo,
           missao_prompt: metrics.missaoPrompt
@@ -4631,6 +4677,7 @@ const TutoresPage = () => {
                               { id: 'historiaDesbloqueada', label: 'História', icon: BookOpen },
                               { id: 'jogoDesbloqueado', label: 'Jogo', icon: Gamepad2 },
                               { id: 'tarefaDesbloqueada', label: 'Tarefa', icon: Pencil },
+                              { id: 'revisaoDesbloqueada', label: 'Revisão', icon: RefreshCw },
                               { id: 'missaoSextaDesbloqueada', label: 'Missão', icon: Target }
                             ].map((step) => (
                               <button
