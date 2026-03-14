@@ -3954,18 +3954,12 @@ const TutoresPage = () => {
         liberacao_manual: updatedLoop.liberadoAgora
       };
 
-      let query = supabase.from('loops_semanais').select('id');
-      if (selectedStudent) query = query.eq('aluno_id', selectedStudent.id);
-      else if (selectedTurma) query = query.eq('turma_id', selectedTurma.id);
-      else return;
-      
-      const { data: existing } = await query.eq('semana_referencia', mondayStr).maybeSingle();
+      const conflictColumns = selectedStudent ? 'aluno_id,semana_referencia' : 'turma_id,semana_referencia';
+      const { error: loopError } = await supabase
+        .from('loops_semanais')
+        .upsert(payload, { onConflict: conflictColumns });
 
-      if (existing) {
-        await supabase.from('loops_semanais').update(payload).eq('id', existing.id);
-      } else {
-        await supabase.from('loops_semanais').insert([payload]);
-      }
+      if (loopError) throw loopError;
 
       // 2. Salvar configurações extras (desbloqueios e missão)
       const extraPayload = {
@@ -3982,17 +3976,12 @@ const TutoresPage = () => {
         missao_prompt: metrics.missaoPrompt
       };
 
-      let queryExtra = supabase.from('loop_semanal_config').select('id');
-      if (selectedStudent) queryExtra = queryExtra.eq('aluno_id', selectedStudent.id);
-      else if (selectedTurma) queryExtra = queryExtra.eq('turma_id', selectedTurma.id);
-      
-      const { data: existingExtra } = await queryExtra.eq('semana_inicio', mondayStr).maybeSingle();
+      const extraConflictColumns = selectedStudent ? 'aluno_id,semana_inicio' : 'turma_id,semana_inicio';
+      const { error: extraError } = await supabase
+        .from('loop_semanal_config')
+        .upsert(extraPayload, { onConflict: extraConflictColumns });
 
-      if (existingExtra) {
-        await supabase.from('loop_semanal_config').update(extraPayload).eq('id', existingExtra.id);
-      } else {
-        await supabase.from('loop_semanal_config').insert([extraPayload]);
-      }
+      if (extraError) throw extraError;
 
     } catch (err) {
       console.error('Error saving weekly loop:', err);
@@ -4137,7 +4126,7 @@ const TutoresPage = () => {
         .from('metricas_progresso')
         .insert({
           aluno_id: selectedStudent.id,
-          tutor_id: tutorData.id,
+          tutor_id: tutorData?.id || null,
           semana_inicio: semanaInicio,
           oralidade: metrics.oralidade,
           compreensao: metrics.compreensao,
@@ -4152,7 +4141,7 @@ const TutoresPage = () => {
         .from('feedbacks_pedagogicos')
         .insert({
           aluno_id: selectedStudent.id,
-          tutor_id: tutorData.id,
+          tutor_id: tutorData?.id || null,
           semana_inicio: semanaInicio,
           conteudo: metrics.feedback,
           orientacao_familia: metrics.orientacao
@@ -4191,6 +4180,7 @@ const TutoresPage = () => {
         historiaDesbloqueada: true,
         jogoDesbloqueado: true,
         tarefaDesbloqueada: true,
+        revisaoDesbloqueada: true,
         missaoSextaDesbloqueada: true
       });
     } catch (err: any) {
