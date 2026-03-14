@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS alunos (
     parent_id UUID REFERENCES pais(id) ON DELETE CASCADE,
     tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
     turma_id UUID REFERENCES turmas(id) ON DELETE SET NULL,
+    status TEXT DEFAULT 'ativo',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -124,6 +125,8 @@ CREATE TABLE IF NOT EXISTS biblioteca_recursos (
     tipo TEXT NOT NULL, -- video, jogo, tarefa, historia, revisao, missao
     url_recurso TEXT NOT NULL,
     miniatura_url TEXT,
+    formato TEXT, -- pdf, audio, video, link, etc
+    conteudo_json JSONB, -- Para listas de tarefas ou cards de missão
     nivel TEXT,
     categoria TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -196,14 +199,22 @@ ALTER TABLE loop_semanal_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE execucoes_atividades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE metricas_progresso ENABLE ROW LEVEL SECURITY;
 ALTER TABLE feedbacks_pedagogicos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reflexoes_familia ENABLE ROW LEVEL SECURITY;
+ALTER TABLE missoes_casa ENABLE ROW LEVEL SECURITY;
+ALTER TABLE avaliacoes_tutores ENABLE ROW LEVEL SECURITY;
 
 -- Basic Policies (Simplified for this environment)
 -- In a real app, we would check auth.uid() against tutor_id or parent_id
-CREATE POLICY "Allow all public read for resources" ON biblioteca_recursos FOR SELECT USING (true);
-CREATE POLICY "Allow tutors to manage loops" ON loops_semanais FOR ALL USING (true);
-CREATE POLICY "Allow tutors to manage config" ON loop_semanal_config FOR ALL USING (true);
-CREATE POLICY "Allow all read for students data" ON loops_semanais FOR SELECT USING (true);
-CREATE POLICY "Allow all read for config data" ON loop_semanal_config FOR SELECT USING (true);
-CREATE POLICY "Allow all read for progress" ON metricas_progresso FOR SELECT USING (true);
-CREATE POLICY "Allow all read for feedback" ON feedbacks_pedagogicos FOR SELECT USING (true);
-CREATE POLICY "Allow all read for executions" ON execucoes_atividades FOR ALL USING (true);
+CREATE POLICY "Allow all for tutores" ON tutores FOR ALL USING (true);
+CREATE POLICY "Allow all for pais" ON pais FOR ALL USING (true);
+CREATE POLICY "Allow all for alunos" ON alunos FOR ALL USING (true);
+CREATE POLICY "Allow all for turmas" ON turmas FOR ALL USING (true);
+CREATE POLICY "Allow all for biblioteca_recursos" ON biblioteca_recursos FOR ALL USING (true);
+CREATE POLICY "Allow all for loops_semanais" ON loops_semanais FOR ALL USING (true);
+CREATE POLICY "Allow all for loop_semanal_config" ON loop_semanal_config FOR ALL USING (true);
+CREATE POLICY "Allow all for execucoes_atividades" ON execucoes_atividades FOR ALL USING (true);
+CREATE POLICY "Allow all for metricas_progresso" ON metricas_progresso FOR ALL USING (true);
+CREATE POLICY "Allow all for feedbacks_pedagogicos" ON feedbacks_pedagogicos FOR ALL USING (true);
+CREATE POLICY "Allow all for reflexoes_familia" ON reflexoes_familia FOR ALL USING (true);
+CREATE POLICY "Allow all for missoes_casa" ON missoes_casa FOR ALL USING (true);
+CREATE POLICY "Allow all for avaliacoes_tutores" ON avaliacoes_tutores FOR ALL USING (true);

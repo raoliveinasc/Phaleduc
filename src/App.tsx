@@ -3136,9 +3136,8 @@ const AlunosPaisPage = () => {
                                 id: 'missao-manual',
                                 titulo: loopConfig.missao_titulo,
                                 descricao: loopConfig.missao_prompt || 'Realize a atividade cultural proposta pelo seu tutor.',
-                                tipo_recurso: 'Missão Cultural',
                                 tipo: 'missao',
-                                capa_url: 'https://images.unsplash.com/photo-1523050853063-bd8012fec4c8?auto=format&fit=crop&q=80&w=800'
+                                miniatura_url: 'https://images.unsplash.com/photo-1523050853063-bd8012fec4c8?auto=format&fit=crop&q=80&w=800'
                               });
                               setIsActivityModalOpen(true);
                             }
@@ -3217,7 +3216,7 @@ const AlunosPaisPage = () => {
                   >
                     {/* Left: Media/Content */}
                     <div className="w-full md:w-1/2 bg-gray-100 relative aspect-video md:aspect-auto">
-                      {selectedActivity.tipo_recurso === 'video' ? (
+                      {selectedActivity.formato === 'video' ? (
                         <iframe 
                           src={selectedActivity.url_recurso}
                           className="w-full h-full object-cover"
@@ -3226,14 +3225,14 @@ const AlunosPaisPage = () => {
                         />
                       ) : (
                         <img 
-                          src={selectedActivity.capa_url || "https://picsum.photos/seed/activity/800/600"} 
+                          src={selectedActivity.miniatura_url || "https://picsum.photos/seed/activity/800/600"} 
                           className="w-full h-full object-cover"
                           referrerPolicy="no-referrer"
                         />
                       )}
                       <div className="absolute top-6 left-6 bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-lg">
                         <span className="text-xs font-black text-secondary uppercase tracking-widest flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-primary" /> {selectedActivity.tipo_recurso}
+                          <Sparkles className="w-4 h-4 text-primary" /> {selectedActivity.tipo}
                         </span>
                       </div>
                     </div>
@@ -3263,7 +3262,7 @@ const AlunosPaisPage = () => {
                           <p className="text-secondary/70 font-medium leading-relaxed">{selectedActivity.descricao}</p>
                         </div>
 
-                        {selectedActivity.tipo_recurso === 'documento' && (
+                        {selectedActivity.formato === 'pdf' && (
                           <a 
                             href={selectedActivity.url_recurso} 
                             target="_blank" 

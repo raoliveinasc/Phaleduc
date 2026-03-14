@@ -1068,8 +1068,8 @@ const ManageBiblioteca = () => {
                         <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">URL do Arquivo</label>
                         <input 
                           type="text"
-                          value={formData.recurso_url || ''}
-                          onChange={(e) => setFormData({...formData, recurso_url: e.target.value})}
+                          value={formData.url_recurso || ''}
+                          onChange={(e) => setFormData({...formData, url_recurso: e.target.value})}
                           className="w-full px-6 py-4 bg-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
                           placeholder="https://..."
                         />
@@ -1094,8 +1094,8 @@ const ManageBiblioteca = () => {
                         <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Link do Jogo</label>
                         <input 
                           type="text"
-                          value={formData.recurso_url || ''}
-                          onChange={(e) => setFormData({...formData, recurso_url: e.target.value})}
+                          value={formData.url_recurso || ''}
+                          onChange={(e) => setFormData({...formData, url_recurso: e.target.value})}
                           className="w-full px-6 py-4 bg-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
                           placeholder="https://wordwall.net/..."
                         />
@@ -1146,8 +1146,8 @@ const ManageBiblioteca = () => {
                       <p className="text-[10px] text-secondary/40 font-medium italic ml-2">A revisão combina elementos dos outros tipos. Use a descrição para detalhar o roteiro.</p>
                       <input 
                         type="text"
-                        value={formData.recurso_url || ''}
-                        onChange={(e) => setFormData({...formData, recurso_url: e.target.value})}
+                        value={formData.url_recurso || ''}
+                        onChange={(e) => setFormData({...formData, url_recurso: e.target.value})}
                         className="w-full px-6 py-4 bg-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-sm"
                         placeholder="Link ou ID de referência"
                       />
