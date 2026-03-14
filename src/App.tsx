@@ -29,6 +29,7 @@ import {
   Coffee,
   Bird,
   Target,
+  Compass,
   LayoutDashboard,
   Calendar,
   Gamepad,
@@ -2481,7 +2482,7 @@ const AlunosPaisPage = () => {
   };
 
   useEffect(() => {
-    if (view === 'child') {
+    if (view === 'child' || view === 'parent') {
       const id = selectedChild?.id || activeChildId;
       if (id) {
         fetchChildData(id);
@@ -2575,12 +2576,29 @@ const AlunosPaisPage = () => {
     }
 
     // Buscar configurações extras (missão, desbloqueios)
-    const { data: extraConfig } = await supabase
+    let { data: extraConfig } = await supabase
       .from('loop_semanal_config')
       .select('*')
       .eq('aluno_id', childId)
       .eq('semana_inicio', mondayStr)
       .maybeSingle();
+    
+    // Fallback para a turma se não houver config individual
+    if (!extraConfig) {
+      const { data: student } = await supabase.from('alunos').select('turma_id').eq('id', childId).maybeSingle();
+      if (student?.turma_id) {
+        const { data: turmaExtraConfig } = await supabase
+          .from('loop_semanal_config')
+          .select('*')
+          .eq('turma_id', student.turma_id)
+          .eq('semana_inicio', mondayStr)
+          .maybeSingle();
+        
+        if (turmaExtraConfig) {
+          extraConfig = turmaExtraConfig;
+        }
+      }
+    }
     
     if (config) {
       if (extraConfig) {
@@ -3669,6 +3687,9 @@ const TutoresPage = () => {
   const [evaluationPoints, setEvaluationPoints] = useState(0);
   const [evaluationFeedback, setEvaluationFeedback] = useState('');
   const [isSavingMetrics, setIsSavingMetrics] = useState(false);
+  const [isSavingLoop, setIsSavingLoop] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [loopProgress, setLoopProgress] = useState<Record<string, number>>({});
   const [metrics, setMetrics] = useState({
     oralidade: 0,
     compreensao: 0,
@@ -3703,6 +3724,67 @@ const TutoresPage = () => {
       fetchWeeklyLoop();
     }
   }, [activeTab, selectedTurma, selectedStudent]);
+
+  useEffect(() => {
+    if (isLoggedIn && tutorData && (selectedTurma || selectedStudent)) {
+      fetchLoopProgress();
+    }
+  }, [weeklyLoop, selectedTurma, selectedStudent]);
+
+  const fetchLoopProgress = async () => {
+    if (!weeklyLoop || (!selectedTurma && !selectedStudent)) return;
+
+    const resourceIds = [
+      weeklyLoop.historia?.id,
+      weeklyLoop.jogo?.id,
+      weeklyLoop.tarefa?.id,
+      weeklyLoop.revisao?.id,
+      weeklyLoop.missao?.id
+    ].filter(Boolean);
+
+    if (resourceIds.length === 0) {
+      setLoopProgress({});
+      return;
+    }
+
+    try {
+      const { data: executions } = await supabase
+        .from('execucoes_atividades')
+        .select('aluno_id, recurso_id')
+        .in('recurso_id', resourceIds);
+
+      const progress: Record<string, number> = {};
+      const types = ['historia', 'jogo', 'tarefa', 'revisao', 'missao'];
+
+      types.forEach(type => {
+        const resource = weeklyLoop[type];
+        if (!resource) {
+          progress[type] = 0;
+          return;
+        }
+
+        const resourceExecutions = executions?.filter(ex => ex.recurso_id === resource.id) || [];
+        
+        if (selectedStudent) {
+          const completed = resourceExecutions.some(ex => ex.aluno_id === selectedStudent.id);
+          progress[type] = completed ? 100 : 0;
+        } else if (selectedTurma) {
+          const studentsInTurma = tutorStudents.filter(s => s.turma_id === selectedTurma.id);
+          if (studentsInTurma.length === 0) {
+            progress[type] = 0;
+          } else {
+            const studentIdsInTurma = studentsInTurma.map(s => s.id);
+            const completedCount = resourceExecutions.filter(ex => studentIdsInTurma.includes(ex.aluno_id)).length;
+            progress[type] = Math.round((completedCount / studentsInTurma.length) * 100);
+          }
+        }
+      });
+
+      setLoopProgress(progress);
+    } catch (err) {
+      console.error('Error fetching loop progress:', err);
+    }
+  };
 
   const fetchWeeklyLoop = async () => {
     try {
@@ -3745,12 +3827,11 @@ const TutoresPage = () => {
 
       if (activeConfig) {
         // Buscar também as configs extras (missão, desbloqueios)
-        const { data: extraConfig } = await supabase
-          .from('loop_semanal_config')
-          .select('*')
-          .eq('aluno_id', selectedStudent?.id)
-          .eq('semana_inicio', mondayStr)
-          .maybeSingle();
+        let queryExtra = supabase.from('loop_semanal_config').select('*').eq('semana_inicio', mondayStr);
+        if (selectedStudent) queryExtra = queryExtra.eq('aluno_id', selectedStudent.id);
+        else if (selectedTurma) queryExtra = queryExtra.eq('turma_id', selectedTurma.id);
+        
+        const { data: extraConfig } = await queryExtra.maybeSingle();
 
         setWeeklyLoop({
           historia: activeConfig.historia,
@@ -3799,6 +3880,7 @@ const TutoresPage = () => {
 
   const saveWeeklyLoop = async (updatedLoop: any) => {
     if (!selectedTurma && !selectedStudent) return;
+    setIsSavingLoop(true);
 
     try {
       const now = new Date();
@@ -3810,6 +3892,7 @@ const TutoresPage = () => {
       const payload = {
         turma_id: selectedStudent ? null : (selectedTurma?.id || null),
         aluno_id: selectedStudent?.id || null,
+        tutor_id: tutorData?.id || null,
         semana_referencia: mondayStr,
         historia_id: updatedLoop.historia?.id || null,
         historia_agendamento: updatedLoop.historia_agendamento || null,
@@ -3836,8 +3919,40 @@ const TutoresPage = () => {
       } else {
         await supabase.from('loops_semanais').insert([payload]);
       }
+
+      // 2. Salvar configurações extras (desbloqueios e missão)
+      const extraPayload = {
+        aluno_id: selectedStudent?.id || null,
+        turma_id: selectedStudent ? null : (selectedTurma?.id || null),
+        tutor_id: tutorData?.id || null,
+        semana_inicio: mondayStr,
+        historia_desbloqueada: metrics.historiaDesbloqueada,
+        jogo_desbloqueado: metrics.jogoDesbloqueado,
+        tarefa_desbloqueada: metrics.tarefaDesbloqueada,
+        revisao_desbloqueada: metrics.revisaoDesbloqueada,
+        missao_sexta_desbloqueada: metrics.missaoSextaDesbloqueada,
+        missao_titulo: metrics.missaoTitulo,
+        missao_prompt: metrics.missaoPrompt
+      };
+
+      let queryExtra = supabase.from('loop_semanal_config').select('id');
+      if (selectedStudent) queryExtra = queryExtra.eq('aluno_id', selectedStudent.id);
+      else if (selectedTurma) queryExtra = queryExtra.eq('turma_id', selectedTurma.id);
+      
+      const { data: existingExtra } = await queryExtra.eq('semana_inicio', mondayStr).maybeSingle();
+
+      if (existingExtra) {
+        await supabase.from('loop_semanal_config').update(extraPayload).eq('id', existingExtra.id);
+      } else {
+        await supabase.from('loop_semanal_config').insert([extraPayload]);
+      }
+
     } catch (err) {
       console.error('Error saving weekly loop:', err);
+    } finally {
+      setIsSavingLoop(false);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
     }
   };
 
@@ -4494,10 +4609,16 @@ const TutoresPage = () => {
                               <div className="space-y-1.5">
                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-secondary/30">
                                   <span>Progresso</span>
-                                  <span>65%</span>
+                                  <span>{loopProgress[step.type] || 0}%</span>
                                 </div>
                                 <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                  <div className="h-full bg-primary transition-all" style={{ width: '65%' }} />
+                                  <div 
+                                    className={cn(
+                                      "h-full transition-all duration-1000",
+                                      (loopProgress[step.type] || 0) === 100 ? "bg-success" : "bg-primary"
+                                    )} 
+                                    style={{ width: `${loopProgress[step.type] || 0}%` }} 
+                                  />
                                 </div>
                               </div>
                             </div>
@@ -4530,6 +4651,106 @@ const TutoresPage = () => {
                     </div>
                   );
                 })}
+              </div>
+              
+              {/* Mission Details & Unlocks */}
+              <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-8">
+                <div className="flex items-center gap-3">
+                  <Compass className="w-6 h-6 text-pink-500" />
+                  <h4 className="text-lg font-black text-secondary">Detalhes da Missão Cultural</h4>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-4">Título da Missão</label>
+                    <input 
+                      type="text"
+                      value={metrics.missaoTitulo}
+                      onChange={(e) => setMetrics({ ...metrics, missaoTitulo: e.target.value })}
+                      className="w-full p-6 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+                      placeholder="Ex: Exploradores de Museus"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-4">Prompt/Instrução da Missão</label>
+                    <textarea 
+                      value={metrics.missaoPrompt}
+                      onChange={(e) => setMetrics({ ...metrics, missaoPrompt: e.target.value })}
+                      className="w-full p-6 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-medium h-24"
+                      placeholder="O que o aluno deve fazer nesta missão?"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-4 pt-4 border-t border-gray-50">
+                  {[
+                    { id: 'historiaDesbloqueada', label: 'História', icon: BookOpen },
+                    { id: 'jogoDesbloqueado', label: 'Jogo', icon: Gamepad2 },
+                    { id: 'tarefaDesbloqueada', label: 'Tarefa', icon: Pencil },
+                    { id: 'revisaoDesbloqueada', label: 'Revisão', icon: RefreshCw },
+                    { id: 'missaoSextaDesbloqueada', label: 'Missão', icon: Compass },
+                  ].map((station) => (
+                    <button
+                      key={station.id}
+                      onClick={() => setMetrics({ ...metrics, [station.id]: !(metrics as any)[station.id] })}
+                      className={cn(
+                        "flex items-center gap-3 px-6 py-3 rounded-2xl border transition-all font-bold text-[10px] uppercase tracking-widest",
+                        (metrics as any)[station.id]
+                          ? "bg-primary/10 border-primary text-primary"
+                          : "bg-gray-50 border-gray-100 text-secondary/40"
+                      )}
+                    >
+                      <station.icon className="w-4 h-4" />
+                      {station.label} {(metrics as any)[station.id] ? 'Liberado' : 'Bloqueado'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Save Button & Status */}
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6 pt-8 border-t border-gray-100">
+                <div className="flex items-center gap-4">
+                  <div className={cn(
+                    "w-3 h-3 rounded-full transition-all duration-500",
+                    isSavingLoop ? "bg-warning animate-pulse" : "bg-success"
+                  )} />
+                  <p className="text-xs font-bold text-secondary/60">
+                    {isSavingLoop ? 'Salvando alterações...' : saveSuccess ? 'Alterações salvas com sucesso! ✨' : 'Todas as alterações foram sincronizadas'}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  {saveSuccess && (
+                    <motion.span 
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="text-[10px] font-black text-success uppercase tracking-widest"
+                    >
+                      Sincronizado!
+                    </motion.span>
+                  )}
+                  <button 
+                    onClick={() => saveWeeklyLoop(weeklyLoop)}
+                    disabled={isSavingLoop || (!selectedTurma && !selectedStudent)}
+                    className={cn(
+                      "px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3",
+                      isSavingLoop 
+                        ? "bg-gray-100 text-secondary/40 cursor-not-allowed" 
+                        : saveSuccess
+                          ? "bg-success text-white shadow-xl shadow-success/20"
+                          : "bg-primary text-white shadow-xl shadow-primary/20 hover:scale-105 active:scale-95"
+                    )}
+                  >
+                    {isSavingLoop ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : saveSuccess ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4" />
+                    )}
+                    {isSavingLoop ? 'Salvando...' : saveSuccess ? 'Salvo!' : 'Salvar Atribuições'}
+                  </button>
+                </div>
               </div>
             </motion.div>
           )}

@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS alunos (
     observacoes TEXT,
     parent_id UUID REFERENCES pais(id) ON DELETE CASCADE,
     tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
+    turma_id UUID REFERENCES turmas(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -89,6 +90,8 @@ CREATE TABLE IF NOT EXISTS avaliacoes_tutores (
 CREATE TABLE IF NOT EXISTS loop_semanal_config (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
+    turma_id UUID REFERENCES turmas(id) ON DELETE CASCADE,
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
     semana_inicio DATE NOT NULL,
     historia_desbloqueada BOOLEAN DEFAULT FALSE,
     jogo_desbloqueado BOOLEAN DEFAULT FALSE,
@@ -97,9 +100,12 @@ CREATE TABLE IF NOT EXISTS loop_semanal_config (
     missao_titulo TEXT,
     missao_prompt TEXT,
     revisao_desbloqueada BOOLEAN DEFAULT TRUE,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(aluno_id, semana_inicio)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Índices únicos para garantir apenas um config por semana por aluno ou turma
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loop_config_aluno_semana ON loop_semanal_config (aluno_id, semana_inicio) WHERE aluno_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loop_config_turma_semana ON loop_semanal_config (turma_id, semana_inicio) WHERE turma_id IS NOT NULL;
 
 -- Tabela de Turmas
 CREATE TABLE IF NOT EXISTS turmas (
@@ -115,9 +121,9 @@ CREATE TABLE IF NOT EXISTS biblioteca_recursos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     titulo TEXT NOT NULL,
     descricao TEXT,
-    tipo_recurso TEXT NOT NULL, -- video, documento, link
+    tipo TEXT NOT NULL, -- video, jogo, tarefa, historia, revisao, missao
     url_recurso TEXT NOT NULL,
-    capa_url TEXT,
+    miniatura_url TEXT,
     nivel TEXT,
     categoria TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -128,6 +134,7 @@ CREATE TABLE IF NOT EXISTS loops_semanais (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     turma_id UUID REFERENCES turmas(id) ON DELETE CASCADE,
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
     semana_referencia DATE NOT NULL,
     historia_id UUID REFERENCES biblioteca_recursos(id),
     historia_agendamento TIMESTAMP WITH TIME ZONE,
@@ -140,9 +147,12 @@ CREATE TABLE IF NOT EXISTS loops_semanais (
     missao_id UUID REFERENCES biblioteca_recursos(id),
     missao_agendamento TIMESTAMP WITH TIME ZONE,
     liberacao_manual BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(turma_id, aluno_id, semana_referencia)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Índices únicos para garantir apenas um loop por semana por aluno ou turma
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loops_aluno_semana ON loops_semanais (aluno_id, semana_referencia) WHERE aluno_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loops_turma_semana ON loops_semanais (turma_id, semana_referencia) WHERE turma_id IS NOT NULL;
 
 -- Tabela para as missões de casa culturais
 CREATE TABLE IF NOT EXISTS missoes_casa (
@@ -165,3 +175,35 @@ CREATE TABLE IF NOT EXISTS reflexoes_familia (
     audio_url TEXT, -- URL para o áudio/vídeo de 30-60 seg
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Tabela para execuções de atividades pelos alunos
+CREATE TABLE IF NOT EXISTS execucoes_atividades (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
+    recurso_id UUID REFERENCES biblioteca_recursos(id) ON DELETE CASCADE,
+    data_conclusao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(aluno_id, recurso_id)
+);
+
+-- Enable RLS on all tables
+ALTER TABLE tutores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pais ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alunos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE turmas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE biblioteca_recursos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE loops_semanais ENABLE ROW LEVEL SECURITY;
+ALTER TABLE loop_semanal_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE execucoes_atividades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE metricas_progresso ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feedbacks_pedagogicos ENABLE ROW LEVEL SECURITY;
+
+-- Basic Policies (Simplified for this environment)
+-- In a real app, we would check auth.uid() against tutor_id or parent_id
+CREATE POLICY "Allow all public read for resources" ON biblioteca_recursos FOR SELECT USING (true);
+CREATE POLICY "Allow tutors to manage loops" ON loops_semanais FOR ALL USING (true);
+CREATE POLICY "Allow tutors to manage config" ON loop_semanal_config FOR ALL USING (true);
+CREATE POLICY "Allow all read for students data" ON loops_semanais FOR SELECT USING (true);
+CREATE POLICY "Allow all read for config data" ON loop_semanal_config FOR SELECT USING (true);
+CREATE POLICY "Allow all read for progress" ON metricas_progresso FOR SELECT USING (true);
+CREATE POLICY "Allow all read for feedback" ON feedbacks_pedagogicos FOR SELECT USING (true);
+CREATE POLICY "Allow all read for executions" ON execucoes_atividades FOR ALL USING (true);
