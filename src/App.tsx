@@ -2483,7 +2483,8 @@ const AlunosPaisPage = () => {
 
   useEffect(() => {
     if (view === 'child' || view === 'parent') {
-      const id = selectedChild?.id || activeChildId;
+      // Priorizar activeChildId se estiver no modo parent, caso contrário usar selectedChild
+      const id = view === 'parent' ? activeChildId : (selectedChild?.id || activeChildId);
       if (id) {
         fetchChildData(id);
       }
@@ -2506,6 +2507,8 @@ const AlunosPaisPage = () => {
     // Reset local state to avoid showing stale data
     setLoopConfig(null);
     setChildExecutions([]);
+    setChildMetrics(null);
+    setChildFeedback([]);
 
     // 1. Buscar métricas mais recentes
     const { data: metrics } = await supabase
@@ -2546,68 +2549,78 @@ const AlunosPaisPage = () => {
     // 3. Buscar config do loop semanal (Novo: loops_semanais)
     const mondayStr = getMonday(new Date());
 
-    // Primeiro tenta buscar por aluno individual
-    let { data: config } = await supabase
-      .from('loops_semanais')
-      .select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)')
-      .eq('aluno_id', childId)
-      .eq('semana_referencia', mondayStr)
-      .maybeSingle();
-    
-    // Verifica se o config do aluno está vazio (sem nenhuma atividade)
-    const isConfigEmpty = !config || (!config.historia_id && !config.jogo_id && !config.tarefa_id && !config.revisao_id && !config.missao_id);
+    try {
+      // Primeiro tenta buscar por aluno individual
+      let { data: config, error: configError } = await supabase
+        .from('loops_semanais')
+        .select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)')
+        .eq('aluno_id', childId)
+        .eq('semana_referencia', mondayStr)
+        .maybeSingle();
+      
+      if (configError) console.error("Erro ao buscar loops_semanais:", configError);
+      
+      // Verifica se o config do aluno está vazio (sem nenhuma atividade)
+      const isConfigEmpty = !config || (!config.historia_id && !config.jogo_id && !config.tarefa_id && !config.revisao_id && !config.missao_id);
 
-    // Se não encontrar ou se o config individual estiver vazio, tenta buscar pela turma do aluno
-    if (isConfigEmpty) {
-      const { data: student } = await supabase.from('alunos').select('turma_id').eq('id', childId).maybeSingle();
-      if (student?.turma_id) {
-        const { data: turmaConfig } = await supabase
-          .from('loops_semanais')
-          .select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)')
-          .eq('turma_id', student.turma_id)
-          .eq('semana_referencia', mondayStr)
-          .maybeSingle();
-        
-        // Só substitui se o da turma tiver conteúdo
-        if (turmaConfig && (turmaConfig.historia_id || turmaConfig.jogo_id || turmaConfig.tarefa_id || turmaConfig.revisao_id || turmaConfig.missao_id)) {
-          config = turmaConfig;
+      // Se não encontrar ou se o config individual estiver vazio, tenta buscar pela turma do aluno
+      if (isConfigEmpty) {
+        const { data: student } = await supabase.from('alunos').select('turma_id').eq('id', childId).maybeSingle();
+        if (student?.turma_id) {
+          const { data: turmaConfig } = await supabase
+            .from('loops_semanais')
+            .select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)')
+            .eq('turma_id', student.turma_id)
+            .eq('semana_referencia', mondayStr)
+            .maybeSingle();
+          
+          // Só substitui se o da turma tiver conteúdo
+          if (turmaConfig && (turmaConfig.historia_id || turmaConfig.jogo_id || turmaConfig.tarefa_id || turmaConfig.revisao_id || turmaConfig.missao_id)) {
+            config = turmaConfig;
+          }
         }
       }
-    }
 
-    // Buscar configurações extras (missão, desbloqueios)
-    let { data: extraConfig } = await supabase
-      .from('loop_semanal_config')
-      .select('*')
-      .eq('aluno_id', childId)
-      .eq('semana_inicio', mondayStr)
-      .maybeSingle();
-    
-    // Fallback para a turma se não houver config individual
-    if (!extraConfig) {
-      const { data: student } = await supabase.from('alunos').select('turma_id').eq('id', childId).maybeSingle();
-      if (student?.turma_id) {
-        const { data: turmaExtraConfig } = await supabase
-          .from('loop_semanal_config')
-          .select('*')
-          .eq('turma_id', student.turma_id)
-          .eq('semana_inicio', mondayStr)
-          .maybeSingle();
-        
-        if (turmaExtraConfig) {
-          extraConfig = turmaExtraConfig;
+      // Buscar configurações extras (missão, desbloqueios)
+      let { data: extraConfig, error: extraError } = await supabase
+        .from('loop_semanal_config')
+        .select('*')
+        .eq('aluno_id', childId)
+        .eq('semana_inicio', mondayStr)
+        .maybeSingle();
+      
+      if (extraError) console.error("Erro ao buscar loop_semanal_config:", extraError);
+      
+      // Fallback para a turma se não houver config individual
+      if (!extraConfig) {
+        const { data: student } = await supabase.from('alunos').select('turma_id').eq('id', childId).maybeSingle();
+        if (student?.turma_id) {
+          const { data: turmaExtraConfig } = await supabase
+            .from('loop_semanal_config')
+            .select('*')
+            .eq('turma_id', student.turma_id)
+            .eq('semana_inicio', mondayStr)
+            .maybeSingle();
+          
+          if (turmaExtraConfig) {
+            extraConfig = turmaExtraConfig;
+          }
         }
       }
-    }
-    
-    if (config) {
-      if (extraConfig) {
-        setLoopConfig({ ...config, ...extraConfig });
-      } else {
-        setLoopConfig(config);
+      
+      if (config) {
+        if (extraConfig) {
+          setLoopConfig({ ...config, ...extraConfig });
+        } else {
+          setLoopConfig(config);
+        }
+      } else if (extraConfig) {
+        setLoopConfig(extraConfig);
       }
-    } else if (extraConfig) {
-      setLoopConfig(extraConfig);
+
+      console.log(`[fetchChildData] childId: ${childId}, loopConfig:`, config ? { ...config, ...extraConfig } : extraConfig);
+    } catch (err) {
+      console.error("Erro geral em fetchChildData (Loop):", err);
     }
 
     // 4. Buscar execuções
@@ -2637,7 +2650,7 @@ const AlunosPaisPage = () => {
     }
 
     // Check completion
-    const isCompleted = childExecutions.some(ex => ex.recurso_id === resource.id);
+    const isCompleted = resource && childExecutions.some(ex => ex.recurso_id === resource.id);
     if (isCompleted) return 'completed';
 
     return 'available';
@@ -3117,6 +3130,16 @@ const AlunosPaisPage = () => {
                           onClick={() => {
                             if (resource) {
                               setSelectedActivity({ ...resource, tipo: station.id });
+                              setIsActivityModalOpen(true);
+                            } else if (station.id === 'missao' && loopConfig?.missao_titulo) {
+                              setSelectedActivity({
+                                id: 'missao-manual',
+                                titulo: loopConfig.missao_titulo,
+                                descricao: loopConfig.missao_prompt || 'Realize a atividade cultural proposta pelo seu tutor.',
+                                tipo_recurso: 'Missão Cultural',
+                                tipo: 'missao',
+                                capa_url: 'https://images.unsplash.com/photo-1523050853063-bd8012fec4c8?auto=format&fit=crop&q=80&w=800'
+                              });
                               setIsActivityModalOpen(true);
                             }
                           }}
@@ -3831,7 +3854,18 @@ const TutoresPage = () => {
         if (selectedStudent) queryExtra = queryExtra.eq('aluno_id', selectedStudent.id);
         else if (selectedTurma) queryExtra = queryExtra.eq('turma_id', selectedTurma.id);
         
-        const { data: extraConfig } = await queryExtra.maybeSingle();
+        let { data: extraConfig } = await queryExtra.maybeSingle();
+
+        // Fallback para a turma se estiver vendo um aluno e não houver config individual
+        if (!extraConfig && selectedStudent?.turma_id) {
+          const { data: turmaExtra } = await supabase
+            .from('loop_semanal_config')
+            .select('*')
+            .eq('turma_id', selectedStudent.turma_id)
+            .eq('semana_inicio', mondayStr)
+            .maybeSingle();
+          if (turmaExtra) extraConfig = turmaExtra;
+        }
 
         setWeeklyLoop({
           historia: activeConfig.historia,
@@ -3846,16 +3880,29 @@ const TutoresPage = () => {
           missao_agendamento: activeConfig.missao_agendamento || '',
           liberadoAgora: activeConfig.liberacao_manual
         });
+
         if (extraConfig) {
           setMetrics(prev => ({
             ...prev,
             missaoSextaDesbloqueada: extraConfig.missao_sexta_desbloqueada,
-            missaoTitulo: extraConfig.missao_titulo,
-            missaoPrompt: extraConfig.missao_prompt,
+            missaoTitulo: extraConfig.missao_titulo || '',
+            missaoPrompt: extraConfig.missao_prompt || '',
             historiaDesbloqueada: extraConfig.historia_desbloqueada,
             jogoDesbloqueado: extraConfig.jogo_desbloqueado,
             tarefaDesbloqueada: extraConfig.tarefa_desbloqueada,
             revisaoDesbloqueada: extraConfig.revisao_desbloqueada ?? true,
+          }));
+        } else {
+          // Resetar métricas de desbloqueio se não houver config extra
+          setMetrics(prev => ({
+            ...prev,
+            missaoSextaDesbloqueada: true,
+            missaoTitulo: '',
+            missaoPrompt: '',
+            historiaDesbloqueada: true,
+            jogoDesbloqueado: true,
+            tarefaDesbloqueada: true,
+            revisaoDesbloqueada: true,
           }));
         }
       } else {
