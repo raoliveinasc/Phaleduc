@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS loops_semanais (
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
     tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
     semana_referencia DATE NOT NULL,
+    semana_inicio DATE NOT NULL, -- Adicionado para consistência
     historia_id UUID REFERENCES biblioteca_recursos(id),
     historia_agendamento TIMESTAMP WITH TIME ZONE,
     jogo_id UUID REFERENCES biblioteca_recursos(id),
