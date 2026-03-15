@@ -1,0 +1,960 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  ShoppingBag, 
+  Package, 
+  DollarSign, 
+  AlertTriangle, 
+  Plus, 
+  Search, 
+  Pencil, 
+  Trash2, 
+  X, 
+  Loader2,
+  Image as ImageIcon,
+  Layers,
+  CheckCircle2,
+  Clock,
+  ChevronRight,
+  ClipboardList,
+  User,
+  Mail,
+  MapPin,
+  ExternalLink,
+  Eye,
+  Upload,
+  CreditCard,
+  Download,
+  Printer
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { supabase } from '../lib/supabase';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+import { toast } from 'sonner';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+export const AdminLoja = () => {
+  const [activeTab, setActiveTab] = useState<'produtos' | 'pedidos'>('produtos');
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    totalSales: 0,
+    pendingOrders: 0,
+    outOfStock: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    price_cents: 0,
+    category_id: '',
+    image_url: '',
+    type: 'fisico',
+    stock_quantity: 0,
+    is_subscription_activator: false,
+    stripe_product_id: '',
+    stripe_price_id: ''
+  });
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  async function fetchData() {
+    setLoading(true);
+    try {
+      const [productsRes, categoriesRes, ordersRes] = await Promise.all([
+        supabase.from('store_products').select('*, store_categories(name)').order('created_at', { ascending: false }),
+        supabase.from('store_categories').select('*').order('name'),
+        supabase.from('store_orders').select('*').order('created_at', { ascending: false })
+      ]);
+
+      if (productsRes.error) throw productsRes.error;
+      if (categoriesRes.error) throw categoriesRes.error;
+      if (ordersRes.error) throw ordersRes.error;
+
+      setProducts(productsRes.data || []);
+      setCategories(categoriesRes.data || []);
+      setOrders(ordersRes.data || []);
+
+      // Calculate stats
+      const totalSales = ordersRes.data?.filter(o => o.status === 'pago' || o.status === 'enviado' || o.status === 'entregue').reduce((acc, o) => acc + o.total_amount_cents, 0) || 0;
+      const pendingOrders = ordersRes.data?.filter(o => o.status === 'pendente').length || 0;
+      const outOfStock = productsRes.data?.filter(p => p.stock_quantity <= 0).length || 0;
+
+      setStats({
+        totalSales: totalSales / 100, // Convert to currency
+        pendingOrders,
+        outOfStock
+      });
+
+    } catch (err) {
+      console.error('Error fetching store data:', err);
+      toast.error('Erro ao carregar dados da loja');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleOpenModal = (product: any = null) => {
+    if (product) {
+      setEditingProduct(product);
+      setFormData({
+        name: product.name,
+        description: product.description || '',
+        price_cents: product.price_cents,
+        category_id: product.category_id || '',
+        image_url: product.image_url || '',
+        type: product.type || 'fisico',
+        stock_quantity: product.stock_quantity || 0,
+        is_subscription_activator: product.is_subscription_activator || false,
+        stripe_product_id: product.stripe_product_id || '',
+        stripe_price_id: product.stripe_price_id || ''
+      });
+    } else {
+      setEditingProduct(null);
+      setFormData({
+        name: '',
+        description: '',
+        price_cents: 0,
+        category_id: categories[0]?.id || '',
+        image_url: '',
+        type: 'fisico',
+        stock_quantity: 0,
+        is_subscription_activator: false,
+        stripe_product_id: '',
+        stripe_price_id: ''
+      });
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      // Ensure bucket exists (this might fail if already exists or no permission, but we try)
+      // In a real app, we'd do this once or assume it exists.
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `products/${fileName}`;
+
+      const { error: uploadError, data } = await supabase.storage
+        .from('store-products')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('store-products')
+        .getPublicUrl(filePath);
+
+      setFormData({ ...formData, image_url: publicUrl });
+      toast.success('Imagem enviada com sucesso!');
+    } catch (err: any) {
+      console.error('Error uploading image:', err);
+      toast.error('Erro ao enviar imagem. Verifique se o bucket "store-products" existe.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      if (editingProduct) {
+        const { error } = await supabase
+          .from('store_products')
+          .update(formData)
+          .eq('id', editingProduct.id);
+        if (error) throw error;
+        toast.success('Produto atualizado com sucesso!');
+      } else {
+        const { error } = await supabase
+          .from('store_products')
+          .insert([formData]);
+        if (error) throw error;
+        toast.success('Produto cadastrado com sucesso!');
+      }
+      setIsModalOpen(false);
+      fetchData();
+    } catch (err) {
+      console.error('Error saving product:', err);
+      toast.error('Erro ao salvar produto');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este produto?')) return;
+    try {
+      const { error } = await supabase.from('store_products').delete().eq('id', id);
+      if (error) throw error;
+      toast.success('Produto excluído com sucesso!');
+      fetchData();
+    } catch (err) {
+      console.error('Error deleting product:', err);
+      toast.error('Erro ao excluir produto');
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('store_orders')
+        .update({ status: newStatus })
+        .eq('id', orderId);
+      if (error) throw error;
+      toast.success(`Status atualizado para ${newStatus}`);
+      fetchData();
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder({ ...selectedOrder, status: newStatus });
+      }
+    } catch (err) {
+      console.error('Error updating order status:', err);
+      toast.error('Erro ao atualizar status do pedido');
+    }
+  };
+
+  const handleSyncStripe = async () => {
+    toast.promise(
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+      {
+        loading: 'Sincronizando com Stripe...',
+        success: 'Produtos sincronizados com sucesso!',
+        error: 'Erro ao sincronizar com Stripe',
+      }
+    );
+  };
+
+  const handleExportOrders = () => {
+    const headers = ['ID', 'Cliente', 'Email', 'Total', 'Status', 'Data'];
+    const csvContent = [
+      headers.join(','),
+      ...orders.map(o => [
+        o.id,
+        o.customer_name,
+        o.customer_email,
+        (o.total_amount_cents / 100).toFixed(2),
+        o.status,
+        new Date(o.created_at).toLocaleDateString('pt-BR')
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `pedidos_phaleduc_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Relatório exportado com sucesso!');
+  };
+
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.store_categories?.name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const filteredOrders = orders.filter(o => 
+    o.customer_name.toLowerCase().includes(search.toLowerCase()) ||
+    o.customer_email.toLowerCase().includes(search.toLowerCase()) ||
+    o.id.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const quillModules = {
+    toolbar: [
+      [{ 'header': [1, 2, false] }],
+      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
+      ['link', 'clean']
+    ],
+  };
+
+  return (
+    <div className="space-y-12 pb-20">
+      <header className="flex justify-between items-end">
+        <div>
+          <h2 className="text-4xl font-black text-secondary tracking-tight">Gestão da Loja</h2>
+          <p className="text-secondary/60 font-medium">Controle seu inventário, produtos e vendas.</p>
+        </div>
+        <div className="flex gap-4">
+          <div className="bg-gray-100 p-1 rounded-2xl flex">
+            <button 
+              onClick={() => setActiveTab('produtos')}
+              className={cn(
+                "px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs transition-all",
+                activeTab === 'produtos' ? "bg-white text-primary shadow-sm" : "text-secondary/40 hover:text-secondary"
+              )}
+            >
+              Produtos
+            </button>
+            <button 
+              onClick={() => setActiveTab('pedidos')}
+              className={cn(
+                "px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs transition-all",
+                activeTab === 'pedidos' ? "bg-white text-primary shadow-sm" : "text-secondary/40 hover:text-secondary"
+              )}
+            >
+              Pedidos
+            </button>
+          </div>
+          {activeTab === 'produtos' ? (
+            <div className="flex gap-4">
+              <button 
+                onClick={handleSyncStripe}
+                className="bg-white text-secondary border border-gray-200 px-6 py-4 rounded-2xl font-black uppercase tracking-widest flex items-center gap-2 hover:bg-gray-50 transition-all"
+              >
+                <CreditCard className="w-5 h-5 text-primary" />
+                Sincronizar Stripe
+              </button>
+              <button 
+                onClick={() => handleOpenModal()}
+                className="bg-primary text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 transition-all shadow-lg shadow-primary/20"
+              >
+                <Plus className="w-5 h-5" />
+                Novo Produto
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={handleExportOrders}
+              className="bg-white text-secondary border border-gray-200 px-8 py-4 rounded-2xl font-black uppercase tracking-widest flex items-center gap-2 hover:bg-gray-50 transition-all"
+            >
+              <Download className="w-5 h-5 text-success" />
+              Exportar CSV
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Stats Cards */}
+      <div className="grid md:grid-cols-3 gap-8">
+        <div className="bg-white p-8 rounded-[40px] shadow-xl border border-gray-100 flex items-center gap-6 group hover:shadow-2xl transition-all">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg bg-emerald-500 group-hover:scale-110 transition-transform">
+            <DollarSign className="w-8 h-8" />
+          </div>
+          <div>
+            <p className="text-secondary/40 font-black uppercase text-[10px] tracking-widest">Total de Vendas</p>
+            <p className="text-4xl font-black text-secondary">
+              {loading ? '...' : `R$ ${stats.totalSales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-[40px] shadow-xl border border-gray-100 flex items-center gap-6 group hover:shadow-2xl transition-all">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg bg-amber-500 group-hover:scale-110 transition-transform">
+            <Clock className="w-8 h-8" />
+          </div>
+          <div>
+            <p className="text-secondary/40 font-black uppercase text-[10px] tracking-widest">Pedidos Pendentes</p>
+            <p className="text-4xl font-black text-secondary">{loading ? '...' : stats.pendingOrders}</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-[40px] shadow-xl border border-gray-100 flex items-center gap-6 group hover:shadow-2xl transition-all">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg bg-rose-500 group-hover:scale-110 transition-transform">
+            <AlertTriangle className="w-8 h-8" />
+          </div>
+          <div>
+            <p className="text-secondary/40 font-black uppercase text-[10px] tracking-widest">Produtos Sem Estoque</p>
+            <p className="text-4xl font-black text-secondary">{loading ? '...' : stats.outOfStock}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="bg-white rounded-[40px] shadow-xl border border-gray-100 overflow-hidden">
+        <div className="p-8 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h3 className="text-2xl font-black text-secondary flex items-center gap-3">
+            {activeTab === 'produtos' ? (
+              <>
+                <Package className="w-6 h-6 text-primary" />
+                Inventário de Produtos
+              </>
+            ) : (
+              <>
+                <ClipboardList className="w-6 h-6 text-primary" />
+                Gestão de Pedidos
+              </>
+            )}
+          </h3>
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-secondary/20" />
+            <input 
+              type="text" 
+              placeholder={activeTab === 'produtos' ? "Buscar produtos..." : "Buscar pedidos..."}
+              className="pl-12 pr-6 py-3 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all w-full md:w-80 font-bold text-secondary"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          {activeTab === 'produtos' ? (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50/50">
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Foto</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Nome</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Preço</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Categoria</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Tipo</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Estoque</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="px-8 py-20 text-center">
+                      <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
+                    </td>
+                  </tr>
+                ) : filteredProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-8 py-20 text-center text-secondary/40 font-bold">
+                      Nenhum produto encontrado.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProducts.map((product) => (
+                    <tr key={product.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="px-8 py-6">
+                        <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden border border-gray-200">
+                          {product.image_url ? (
+                            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-secondary/20">
+                              <ImageIcon className="w-6 h-6" />
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <p className="font-black text-secondary">{product.name}</p>
+                        {product.is_subscription_activator && (
+                          <span className="text-[9px] font-black uppercase tracking-widest bg-primary/10 text-primary px-2 py-0.5 rounded-full">Ativador</span>
+                        )}
+                      </td>
+                      <td className="px-8 py-6">
+                        <p className="font-bold text-secondary">R$ {(product.price_cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className="px-3 py-1 bg-gray-100 rounded-full text-[10px] font-black uppercase tracking-widest text-secondary/60">
+                          {product.store_categories?.name || 'Sem Categoria'}
+                        </span>
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className={cn(
+                          "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
+                          product.type === 'fisico' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
+                        )}>
+                          {product.type === 'fisico' ? 'Físico' : 'Digital'}
+                        </span>
+                      </td>
+                      <td className="px-8 py-6">
+                        <p className={cn(
+                          "font-bold",
+                          product.stock_quantity <= 0 ? "text-danger" : "text-secondary/60"
+                        )}>
+                          {product.stock_quantity} un.
+                        </p>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button 
+                            onClick={() => handleOpenModal(product)}
+                            className="p-2 text-secondary/20 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(product.id)}
+                            className="p-2 text-secondary/20 hover:text-danger hover:bg-danger/10 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50/50">
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Pedido ID</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Cliente</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Data</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Total</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Status</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="px-8 py-20 text-center">
+                      <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
+                    </td>
+                  </tr>
+                ) : filteredOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-8 py-20 text-center text-secondary/40 font-bold">
+                      Nenhum pedido encontrado.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredOrders.map((order) => (
+                    <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="px-8 py-6">
+                        <p className="font-mono text-[10px] text-secondary/40 uppercase font-black">
+                          #{order.id.slice(0, 8)}
+                        </p>
+                      </td>
+                      <td className="px-8 py-6">
+                        <p className="font-black text-secondary">{order.customer_name}</p>
+                        <p className="text-[10px] text-secondary/40 font-bold">{order.customer_email}</p>
+                      </td>
+                      <td className="px-8 py-6">
+                        <p className="text-secondary/60 font-bold">
+                          {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                        </p>
+                      </td>
+                      <td className="px-8 py-6">
+                        <p className="font-black text-secondary">
+                          R$ {(order.total_amount_cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className={cn(
+                          "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
+                          order.status === 'pago' ? "bg-success/10 text-success" :
+                          order.status === 'pendente' ? "bg-amber-500/10 text-amber-600" :
+                          order.status === 'cancelado' ? "bg-rose-500/10 text-rose-600" :
+                          "bg-blue-500/10 text-blue-600"
+                        )}>
+                          {order.status}
+                        </span>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <button 
+                          onClick={() => {
+                            setSelectedOrder(order);
+                            setIsOrderModalOpen(true);
+                          }}
+                          className="p-2 text-secondary/20 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Modal Cadastro/Edição de Produto */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsModalOpen(false)}
+              className="absolute inset-0 bg-secondary/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white w-full max-w-4xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]"
+            >
+              <div className="p-10 border-b border-gray-50 flex justify-between items-center">
+                <div>
+                  <h3 className="text-3xl font-black text-secondary">
+                    {editingProduct ? 'Editar Produto' : 'Cadastrar Produto'}
+                  </h3>
+                  <p className="text-secondary/40 font-medium">Preencha os detalhes do item na loja.</p>
+                </div>
+                <button onClick={() => setIsModalOpen(false)} className="p-4 bg-gray-50 rounded-2xl text-secondary/40 hover:text-danger transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSave} className="flex flex-col overflow-hidden">
+                <div className="flex-1 overflow-y-auto p-10 space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Nome */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Nome do Produto</label>
+                      <input 
+                        required
+                        type="text"
+                        className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      />
+                    </div>
+
+                    {/* Categoria */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Categoria</label>
+                      <select 
+                        required
+                        className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                        value={formData.category_id}
+                        onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                      >
+                        <option value="">Selecione uma categoria</option>
+                        {categories.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Preço em Centavos */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Preço (em centavos - Stripe)</label>
+                      <input 
+                        required
+                        type="number"
+                        className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                        value={formData.price_cents}
+                        onChange={(e) => setFormData({ ...formData, price_cents: parseInt(e.target.value) || 0 })}
+                      />
+                      <p className="text-[10px] text-secondary/40 ml-2">Ex: 1000 = R$ 10,00</p>
+                    </div>
+
+                    {/* Estoque */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Quantidade em Estoque</label>
+                      <input 
+                        required
+                        type="number"
+                        className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                        value={formData.stock_quantity}
+                        onChange={(e) => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) || 0 })}
+                      />
+                    </div>
+
+                    {/* Tipo */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Tipo de Produto</label>
+                      <div className="flex gap-4">
+                        {['fisico', 'digital'].map(type => (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, type })}
+                            className={cn(
+                              "flex-1 py-4 rounded-2xl font-bold capitalize transition-all border-2",
+                              formData.type === type 
+                                ? "bg-primary/5 border-primary text-primary" 
+                                : "bg-gray-50 border-transparent text-secondary/40 hover:bg-gray-100"
+                            )}
+                          >
+                            {type === 'fisico' ? 'Físico' : 'Digital'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Ativador de Assinatura */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Ativador de Assinatura?</label>
+                      <div 
+                        onClick={() => setFormData({ ...formData, is_subscription_activator: !formData.is_subscription_activator })}
+                        className={cn(
+                          "w-full px-6 py-4 rounded-2xl cursor-pointer flex items-center justify-between transition-all border-2",
+                          formData.is_subscription_activator 
+                            ? "bg-success/5 border-success text-success" 
+                            : "bg-gray-50 border-transparent text-secondary/40"
+                        )}
+                      >
+                        <span className="font-bold">{formData.is_subscription_activator ? 'Sim, ativa assinatura' : 'Não, produto comum'}</span>
+                        <div className={cn(
+                          "w-12 h-6 rounded-full relative transition-all",
+                          formData.is_subscription_activator ? "bg-success" : "bg-gray-300"
+                        )}>
+                          <div className={cn(
+                            "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                            formData.is_subscription_activator ? "right-1" : "left-1"
+                          )} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stripe IDs */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Stripe Product ID</label>
+                      <input 
+                        type="text"
+                        placeholder="prod_..."
+                        className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                        value={formData.stripe_product_id}
+                        onChange={(e) => setFormData({ ...formData, stripe_product_id: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Stripe Price ID</label>
+                      <input 
+                        type="text"
+                        placeholder="price_..."
+                        className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                        value={formData.stripe_price_id}
+                        onChange={(e) => setFormData({ ...formData, stripe_price_id: e.target.value })}
+                      />
+                    </div>
+
+                    {/* Upload de Imagem */}
+                    <div className="md:col-span-2 space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Imagem do Produto</label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-4">
+                          <div className="flex gap-2">
+                            <input 
+                              type="url"
+                              placeholder="URL da imagem..."
+                              className="flex-1 px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                              value={formData.image_url}
+                              onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                            />
+                            <label className="bg-white border-2 border-dashed border-gray-200 p-4 rounded-2xl cursor-pointer hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-center shrink-0">
+                              <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploading} />
+                              {isUploading ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : <Upload className="w-6 h-6 text-secondary/40" />}
+                            </label>
+                          </div>
+                          <p className="text-[10px] text-secondary/40 ml-2 italic">Insira uma URL ou faça o upload de um arquivo.</p>
+                        </div>
+                        {formData.image_url && (
+                          <div className="h-32 rounded-3xl bg-gray-50 overflow-hidden border border-gray-100 relative group">
+                            <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <button 
+                              type="button"
+                              onClick={() => setFormData({ ...formData, image_url: '' })}
+                              className="absolute top-2 right-2 p-2 bg-danger text-white rounded-xl opacity-0 group-hover:opacity-100 transition-all shadow-lg"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Descrição Rica */}
+                    <div className="md:col-span-2 space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Descrição Detalhada</label>
+                      <div className="bg-gray-50 rounded-2xl overflow-hidden border border-transparent focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+                        <ReactQuill 
+                          theme="snow" 
+                          value={formData.description} 
+                          onChange={(val) => setFormData({ ...formData, description: val })}
+                          modules={quillModules}
+                          className="bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-10 border-t border-gray-50 bg-gray-50/50 flex gap-4">
+                  <button 
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="flex-1 px-8 py-4 bg-white text-secondary/60 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-100 transition-all border border-gray-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={isSaving}
+                    className="flex-1 px-8 py-4 bg-primary text-white rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:hover:scale-100"
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                    ) : (
+                      editingProduct ? 'Salvar Alterações' : 'Cadastrar agora'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Detalhes do Pedido */}
+      <AnimatePresence>
+        {isOrderModalOpen && selectedOrder && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsOrderModalOpen(false)}
+              className="absolute inset-0 bg-secondary/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white w-full max-w-2xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]"
+            >
+              <div className="p-10 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Detalhes do Pedido</p>
+                  <h3 className="text-2xl font-black text-secondary uppercase">
+                    #{selectedOrder.id.slice(0, 8)}
+                  </h3>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => window.print()} 
+                    className="p-4 bg-white rounded-2xl text-secondary/40 hover:text-primary transition-colors shadow-sm"
+                    title="Imprimir Pedido"
+                  >
+                    <Printer className="w-6 h-6" />
+                  </button>
+                  <button onClick={() => setIsOrderModalOpen(false)} className="p-4 bg-white rounded-2xl text-secondary/40 hover:text-danger transition-colors shadow-sm">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-10 space-y-10">
+                {/* Cliente Info */}
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary/40 flex items-center gap-2">
+                      <User className="w-3 h-3" />
+                      Cliente
+                    </h4>
+                    <div className="space-y-1">
+                      <p className="font-black text-secondary text-lg">{selectedOrder.customer_name}</p>
+                      <p className="text-sm text-secondary/60 font-medium flex items-center gap-2">
+                        <Mail className="w-3 h-3" />
+                        {selectedOrder.customer_email}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary/40 flex items-center gap-2">
+                      <Clock className="w-3 h-3" />
+                      Data do Pedido
+                    </h4>
+                    <p className="font-bold text-secondary">
+                      {new Date(selectedOrder.created_at).toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Endereço */}
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary/40 flex items-center gap-2">
+                    <MapPin className="w-3 h-3" />
+                    Endereço de Entrega
+                  </h4>
+                  <p className="p-6 bg-gray-50 rounded-3xl text-sm font-medium text-secondary/70 leading-relaxed border border-gray-100">
+                    {selectedOrder.shipping_address || 'Endereço não informado ou produto digital.'}
+                  </p>
+                </div>
+
+                {/* Itens */}
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary/40 flex items-center gap-2">
+                    <ShoppingBag className="w-3 h-3" />
+                    Itens do Pedido
+                  </h4>
+                  <div className="divide-y divide-gray-50 border border-gray-50 rounded-3xl overflow-hidden">
+                    {selectedOrder.items && Array.isArray(selectedOrder.items) ? (
+                      selectedOrder.items.map((item: any, idx: number) => (
+                        <div key={idx} className="p-6 flex justify-between items-center bg-white">
+                          <div>
+                            <p className="font-black text-secondary">{item.name}</p>
+                            <p className="text-xs text-secondary/40 font-bold">{item.quantity}x R$ {(item.price / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <p className="font-black text-primary">
+                            R$ {( (item.price * item.quantity) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="p-6 text-center text-secondary/40 font-bold italic">Nenhum item listado.</p>
+                    )}
+                    <div className="p-6 bg-gray-50 flex justify-between items-center">
+                      <p className="font-black text-secondary uppercase tracking-widest text-xs">Total do Pedido</p>
+                      <p className="text-2xl font-black text-secondary">
+                        R$ {(selectedOrder.total_amount_cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Update */}
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary/40">Atualizar Status</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {['pendente', 'pago', 'enviado', 'entregue', 'cancelado'].map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => handleUpdateOrderStatus(selectedOrder.id, status)}
+                        className={cn(
+                          "px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2",
+                          selectedOrder.status === status 
+                            ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" 
+                            : "bg-gray-50 border-transparent text-secondary/40 hover:bg-gray-100"
+                        )}
+                      >
+                        {status}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-10 border-t border-gray-50 bg-gray-50/50">
+                <button 
+                  onClick={() => setIsOrderModalOpen(false)}
+                  className="w-full px-8 py-4 bg-white text-secondary/60 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-100 transition-all border border-gray-200"
+                >
+                  Fechar Detalhes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};

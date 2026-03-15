@@ -95,6 +95,8 @@ import {
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+import { Toaster } from 'sonner';
+
 import { AdminArea } from './components/AdminArea';
 import { StudentParentRegistration, TutorRegistration } from './components/RegistrationForms';
 
@@ -5793,6 +5795,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen font-sans">
+      <Toaster position="top-right" richColors />
       <ScrollToTop />
       {!isAdmin && <TopBar />}
       {!isAdmin && <Navbar />}

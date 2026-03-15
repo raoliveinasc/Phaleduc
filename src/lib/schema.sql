@@ -219,3 +219,65 @@ CREATE POLICY "Allow all for feedbacks_pedagogicos" ON feedbacks_pedagogicos FOR
 CREATE POLICY "Allow all for reflexoes_familia" ON reflexoes_familia FOR ALL USING (true);
 CREATE POLICY "Allow all for missoes_casa" ON missoes_casa FOR ALL USING (true);
 CREATE POLICY "Allow all for avaliacoes_tutores" ON avaliacoes_tutores FOR ALL USING (true);
+
+-- Tabela de Categorias da Loja
+CREATE TABLE IF NOT EXISTS store_categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Produtos da Loja
+CREATE TABLE IF NOT EXISTS store_products (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    description TEXT,
+    price_cents INTEGER NOT NULL, -- Preço em centavos para Stripe
+    category_id UUID REFERENCES store_categories(id) ON DELETE SET NULL,
+    image_url TEXT,
+    type TEXT DEFAULT 'fisico', -- 'fisico' ou 'digital'
+    stock_quantity INTEGER DEFAULT 0,
+    is_subscription_activator BOOLEAN DEFAULT FALSE,
+    stripe_product_id TEXT,
+    stripe_price_id TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Pedidos (Melhorada)
+CREATE TABLE IF NOT EXISTS store_orders (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    customer_name TEXT NOT NULL,
+    customer_email TEXT NOT NULL,
+    total_amount_cents INTEGER NOT NULL,
+    status TEXT DEFAULT 'pendente', -- 'pendente', 'pago', 'cancelado', 'enviado', 'entregue'
+    items JSONB NOT NULL, -- Lista de produtos no pedido
+    shipping_address TEXT,
+    payment_id TEXT, -- ID do Stripe ou outro processador
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enable RLS on store tables
+ALTER TABLE store_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE store_products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE store_orders ENABLE ROW LEVEL SECURITY;
+
+-- Basic Policies for store tables
+CREATE POLICY "Allow all for store_categories" ON store_categories FOR ALL USING (true);
+CREATE POLICY "Allow all for store_products" ON store_products FOR ALL USING (true);
+CREATE POLICY "Allow all for store_orders" ON store_orders FOR ALL USING (true);
+
+-- Inserir categorias iniciais
+INSERT INTO store_categories (name, slug) VALUES 
+('Livros', 'livros'),
+('Brinquedos', 'brinquedos'),
+('Cursos', 'cursos'),
+('Acessórios', 'acessorios')
+ON CONFLICT (slug) DO NOTHING;
+
+-- Inserir alguns pedidos de exemplo para o dashboard
+INSERT INTO store_orders (customer_name, customer_email, total_amount_cents, status, items) VALUES
+('João Silva', 'joao@email.com', 15000, 'pago', '[{"name": "Livro de Alfabetização", "price": 5000, "quantity": 3}]'),
+('Maria Oliveira', 'maria@email.com', 8990, 'pendente', '[{"name": "Kit de Jogos Pedagógicos", "price": 8990, "quantity": 1}]'),
+('Carlos Souza', 'carlos@email.com', 25000, 'pago', '[{"name": "Curso de Formação de Tutores", "price": 25000, "quantity": 1}]')
+ON CONFLICT DO NOTHING;
