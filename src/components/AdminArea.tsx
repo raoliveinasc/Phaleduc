@@ -48,9 +48,11 @@ import {
   Layers,
   Gamepad2,
   Sparkles,
-  ShoppingBag
+  ShoppingBag,
+  CreditCard
 } from 'lucide-react';
 import { AdminLoja } from './AdminLoja';
+import { AdminAssinaturas } from './AdminAssinaturas';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { clsx, type ClassValue } from 'clsx';
@@ -73,6 +75,7 @@ const AdminSidebar = () => {
     { name: 'Alunos', path: '/admin/alunos', icon: Backpack },
     { name: 'Tutores', path: '/admin/tutores', icon: GraduationCap },
     { name: 'Loja', path: '/admin/loja', icon: ShoppingBag },
+    { name: 'Assinaturas', path: '/admin/assinaturas', icon: CreditCard },
   ];
 
   return (
@@ -1490,6 +1493,7 @@ export const AdminArea = () => {
               />
             } />
             <Route path="/loja" element={<AdminLoja />} />
+            <Route path="/assinaturas" element={<AdminAssinaturas />} />
           </Routes>
         </AnimatePresence>
       </main>

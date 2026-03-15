@@ -211,6 +211,7 @@ const Navbar = () => {
     { name: 'Home', path: '/', icon: Home },
     { name: 'Sobre', path: '/sobre', icon: Info },
     { name: 'Aulas', path: '/aulas', icon: BookOpen },
+    { name: 'Assinaturas', path: '/assinaturas', icon: CreditCard },
     { name: 'Loja Virtual', path: '/loja', icon: ShoppingBag },
     { name: 'Fotos', path: '/fotos', icon: Camera },
     { name: 'Contato', path: '/contato', icon: Phone },
@@ -1054,6 +1055,194 @@ const DepoimentosPage = () => (
     </section>
   </motion.div>
 );
+
+const AssinaturasPage = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+
+  const plans = [
+    {
+      id: 'mensal',
+      name: 'Plano Mensal',
+      price: 'R$ 97',
+      period: '/mês',
+      description: 'Ideal para experimentar o método.',
+      features: ['Acesso total ao Método', 'Área de Atividades Exclusiva', 'Suporte Pedagógico'],
+      color: 'bg-primary',
+      buttonColor: 'bg-primary',
+      stripePriceId: 'price_monthly_id' // Placeholder
+    },
+    {
+      id: 'semestral',
+      name: 'Plano Semestral',
+      price: 'R$ 497',
+      period: '/6 meses',
+      description: 'O melhor custo-benefício para sua família.',
+      features: ['Acesso total ao Método', 'Área de Atividades Exclusiva', 'Suporte Pedagógico', 'Desconto de 15%'],
+      color: 'bg-secondary',
+      buttonColor: 'bg-secondary',
+      popular: true,
+      stripePriceId: 'price_semiannual_id' // Placeholder
+    },
+    {
+      id: 'anual',
+      name: 'Plano Anual',
+      price: 'R$ 897',
+      period: '/ano',
+      description: 'Compromisso total com o bilinguismo.',
+      features: ['Acesso total ao Método', 'Área de Atividades Exclusiva', 'Suporte Pedagógico', 'Desconto de 25%', 'Mentoria em Grupo'],
+      color: 'bg-success',
+      buttonColor: 'bg-success',
+      stripePriceId: 'price_annual_id' // Placeholder
+    }
+  ];
+
+  const handleSubscribe = async (plan: any) => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Por favor, faça login para assinar.');
+        navigate('/alunos-pais');
+        return;
+      }
+
+      // In a real app, you'd call a backend endpoint to create a Stripe Checkout Session
+      // For this demo, we'll simulate a successful subscription or redirect
+      toast.info(`Iniciando checkout para o ${plan.name}...`);
+      
+      // Mocking redirect to Stripe
+      setTimeout(() => {
+        toast.success('Assinatura simulada com sucesso!');
+        setLoading(false);
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error in subscription:', error);
+      toast.error('Erro ao processar assinatura.');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-white">
+      <PageHeader title="Assinaturas" />
+      
+      <section className="py-24">
+        <div className="max-w-7xl mx-auto px-8">
+          <div className="text-center max-w-3xl mx-auto mb-20 space-y-6">
+            <h2 className="text-5xl font-black text-secondary tracking-tighter">Escolha o plano ideal para sua <span className="text-primary">família</span></h2>
+            <p className="text-xl text-secondary/60 font-medium">Invista no futuro bilíngue do seu filho com o Método Phaleduc.</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {plans.map((plan, i) => (
+              <motion.div 
+                key={plan.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className={cn(
+                  "relative bg-white rounded-[40px] p-10 shadow-2xl border-2 flex flex-col",
+                  plan.popular ? "border-primary scale-105 z-10" : "border-gray-50"
+                )}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-primary text-white px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest shadow-lg">
+                    Mais Popular
+                  </div>
+                )}
+
+                <div className="space-y-6 flex-1">
+                  <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg", plan.color)}>
+                    <CreditCard className="w-8 h-8" />
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-2xl font-black text-secondary">{plan.name}</h3>
+                    <p className="text-secondary/60 font-medium text-sm">{plan.description}</p>
+                  </div>
+
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-5xl font-black text-secondary">{plan.price}</span>
+                    <span className="text-secondary/40 font-bold">{plan.period}</span>
+                  </div>
+
+                  <ul className="space-y-4 pt-6">
+                    {plan.features.map((feature, j) => (
+                      <li key={j} className="flex items-center gap-3 text-secondary/70 font-bold text-sm">
+                        <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <button 
+                  onClick={() => handleSubscribe(plan)}
+                  disabled={loading}
+                  className={cn(
+                    "w-full py-6 rounded-3xl font-black uppercase tracking-widest mt-10 transition-all hover:scale-[1.02] shadow-xl",
+                    plan.buttonColor,
+                    "text-white shadow-primary/20"
+                  )}
+                >
+                  {loading ? 'Processando...' : 'Assinar Agora'}
+                </button>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="py-24 bg-gray-50">
+        <div className="max-w-4xl mx-auto px-8">
+          <div className="text-center mb-16 space-y-4">
+            <h2 className="text-4xl font-black text-secondary tracking-tighter">Perguntas Frequentes</h2>
+            <p className="text-secondary/60 font-medium">Tudo o que você precisa saber sobre o Método Phaleduc.</p>
+          </div>
+
+          <div className="space-y-6">
+            {[
+              {
+                q: "Preciso ser professor para usar o método?",
+                a: "Não, a Phaleduc guia você passo a passo. Nosso método foi desenhado para que pais, mesmo sem formação pedagógica, consigam aplicar as vivências de forma natural e divertida."
+              },
+              {
+                q: "Posso usar para mais de um filho?",
+                a: "Sim, nossos planos permitem múltiplos perfis de alunos dentro da mesma conta familiar, garantindo que cada criança tenha seu próprio acompanhamento de progresso."
+              },
+              {
+                q: "Como funciona o cancelamento?",
+                a: "Você pode cancelar sua assinatura a qualquer momento diretamente pelo seu painel. O acesso continuará ativo até o final do período já pago."
+              },
+              {
+                q: "O suporte pedagógico está incluído?",
+                a: "Sim! Todos os nossos assinantes têm acesso ao nosso canal de suporte para tirar dúvidas sobre a aplicação das atividades e o desenvolvimento bilíngue."
+              }
+            ].map((item, i) => (
+              <motion.div 
+                key={i}
+                initial={{ opacity: 0, x: -20 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 space-y-4"
+              >
+                <h4 className="text-lg font-black text-secondary flex items-center gap-3">
+                  <div className="w-2 h-2 bg-primary rounded-full" />
+                  {item.q}
+                </h4>
+                <p className="text-secondary/60 font-medium leading-relaxed pl-5">
+                  {item.a}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </motion.div>
+  );
+};
 
 const LojaPage = () => {
   const [currency] = useState('USD');
@@ -2472,14 +2661,17 @@ const ProfileSelectionView = ({
   onSelectProfile, 
   onParentAccess, 
   onLogout,
-  onUpdateAvatar
+  onUpdateAvatar,
+  subscription
 }: { 
   profiles: any[], 
   onSelectProfile: (p: any) => void, 
   onParentAccess: () => void,
   onLogout: () => void,
-  onUpdateAvatar: (profileId: string, avatar: string) => Promise<void>
+  onUpdateAvatar: (profileId: string, avatar: string) => Promise<void>,
+  subscription: any
 }) => {
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [selectedProfileForAvatar, setSelectedProfileForAvatar] = useState<any>(null);
 
@@ -2554,6 +2746,46 @@ const ProfileSelectionView = ({
           </button>
         )}
       </div>
+
+      {!isEditing && (
+        <div className="mb-20">
+          {subscription ? (
+            <button 
+              onClick={() => {
+                // If they have a profile selected, go to activities
+                if (profiles.length > 0) {
+                  onSelectProfile(profiles[0]);
+                }
+              }}
+              className="group flex items-center gap-6 bg-primary/10 hover:bg-primary/20 p-6 rounded-[32px] border border-primary/20 transition-all"
+            >
+              <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg">
+                <Sparkles className="w-8 h-8" />
+              </div>
+              <div className="text-left">
+                <h3 className="text-xl font-black text-white tracking-tight">Área de Atividades Exclusiva</h3>
+                <p className="text-primary font-bold text-xs uppercase tracking-widest">Acesso liberado • Explore agora</p>
+              </div>
+              <ChevronRight className="w-6 h-6 text-primary ml-4" />
+            </button>
+          ) : (
+            <button 
+              onClick={() => navigate('/assinaturas')}
+              className="group flex items-center gap-6 bg-danger/10 hover:bg-danger/20 p-6 rounded-[32px] border border-danger/20 transition-all"
+            >
+              <div className="w-16 h-16 bg-danger rounded-2xl flex items-center justify-center text-white shadow-lg">
+                <Lock className="w-8 h-8" />
+              </div>
+              <div className="text-left">
+                <h3 className="text-xl font-black text-white tracking-tight">Área de Atividades Exclusiva</h3>
+                <p className="text-danger font-bold text-xs uppercase tracking-widest">Sua jornada Phaleduc está pausada</p>
+                <p className="text-gray-400 text-[10px] font-medium mt-1">Clique aqui para reativar seu plano</p>
+              </div>
+              <ChevronRight className="w-6 h-6 text-danger ml-4" />
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col items-center gap-8">
         <button 
@@ -2703,6 +2935,7 @@ const PinVerificationModal = ({
 };
 
 const AlunosPaisPage = () => {
+  const navigate = useNavigate();
   const [view, setView] = useState<'login' | 'register' | 'profiles' | 'child' | 'parent' | 'onboarding'>('login');
   const [onboardingStep, setOnboardingStep] = useState<'password' | 'pin' | 'children'>('password');
   const [selectedChild, setSelectedChild] = useState<any | null>(null);
@@ -2724,6 +2957,8 @@ const AlunosPaisPage = () => {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [loginMode, setLoginMode] = useState<'parent' | 'student'>('parent');
+  const [subscription, setSubscription] = useState<any>(null);
+  const [checkingSubscription, setCheckingSubscription] = useState(false);
 
   // Set initial active child when profiles are loaded
   useEffect(() => {
@@ -2738,6 +2973,7 @@ const AlunosPaisPage = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setUser(session.user);
+        await checkSubscription(session.user.id);
         const family = await loadFamilyData(session.user.id);
         
         if (family?.senha_temporaria) {
@@ -2778,6 +3014,30 @@ const AlunosPaisPage = () => {
     if (childProfiles) setProfiles(childProfiles);
     
     return family;
+  };
+
+  const checkSubscription = async (userId: string) => {
+    setCheckingSubscription(true);
+    try {
+      const { data, error } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('current_period_end', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (data) {
+        setSubscription(data);
+      } else {
+        setSubscription(null);
+      }
+    } catch (err) {
+      console.error('Error checking subscription:', err);
+    } finally {
+      setCheckingSubscription(false);
+    }
   };
 
   useEffect(() => {
@@ -3169,6 +3429,11 @@ const AlunosPaisPage = () => {
   };
 
   const handleProfileSelect = (profile: any) => {
+    if (!subscription) {
+      toast.error('Sua jornada Phaleduc está pausada. Por favor, reative seu plano para acessar as atividades.');
+      navigate('/assinaturas');
+      return;
+    }
     setSelectedChild(profile);
     setActiveChildId(profile.id);
     setView('child');
@@ -3334,6 +3599,7 @@ const AlunosPaisPage = () => {
             onParentAccess={() => setPinModalOpen(true)}
             onLogout={handleLogout}
             onUpdateAvatar={handleUpdateAvatar}
+            subscription={subscription}
           />
         )}
 
@@ -6103,6 +6369,7 @@ function AppContent() {
             <Route path="/sobre" element={<SobrePage />} />
             <Route path="/aulas" element={<AulasPage />} />
             <Route path="/loja" element={<LojaPage />} />
+            <Route path="/assinaturas" element={<AssinaturasPage />} />
             <Route path="/depoimentos" element={<DepoimentosPage />} />
             <Route path="/fotos" element={<FotosPage />} />
             <Route path="/blog" element={<BlogPage />} />
