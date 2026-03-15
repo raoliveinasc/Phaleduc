@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   BrowserRouter as Router, 
   Routes, 
@@ -1071,6 +1071,18 @@ const LojaPage = () => {
     address: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const productsRef = useRef<HTMLDivElement>(null);
+
+  const scrollToProducts = () => {
+    setTimeout(() => {
+      productsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  const handleCategorySelect = (categoryId: string | null) => {
+    setSelectedCategory(categoryId);
+    scrollToProducts();
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1222,7 +1234,7 @@ const LojaPage = () => {
         <nav className="bg-gray-50/50 border-t border-gray-100">
           <div className="max-w-7xl mx-auto px-8 py-4 flex flex-wrap justify-center gap-8">
             <button 
-              onClick={() => setSelectedCategory(null)}
+              onClick={() => handleCategorySelect(null)}
               className={cn(
                 "text-xs font-black uppercase tracking-widest transition-colors",
                 !selectedCategory ? "text-primary" : "text-secondary/60 hover:text-primary"
@@ -1233,7 +1245,7 @@ const LojaPage = () => {
             {categories.map((cat) => (
               <button 
                 key={cat.id} 
-                onClick={() => setSelectedCategory(cat.id)}
+                onClick={() => handleCategorySelect(cat.id)}
                 className={cn(
                   "text-xs font-black uppercase tracking-widest transition-colors",
                   selectedCategory === cat.id ? "text-primary" : "text-secondary/60 hover:text-primary"
@@ -1289,7 +1301,7 @@ const LojaPage = () => {
               <motion.div 
                 key={cat.id}
                 whileHover={{ y: -10 }}
-                onClick={() => setSelectedCategory(cat.id)}
+                onClick={() => handleCategorySelect(cat.id)}
                 className="group cursor-pointer"
               >
                 <div className={cn(
@@ -1310,7 +1322,7 @@ const LojaPage = () => {
       </section>
 
       {/* Product Showcase */}
-      <section className="py-24 bg-gray-50">
+      <section ref={productsRef} className="py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-8">
           <div className="flex flex-col md:flex-row justify-between items-end gap-8 mb-16">
             <div className="space-y-4">
@@ -1323,7 +1335,7 @@ const LojaPage = () => {
             </div>
             {selectedCategory && (
               <button 
-                onClick={() => setSelectedCategory(null)}
+                onClick={() => handleCategorySelect(null)}
                 className="text-secondary font-black uppercase tracking-widest text-sm flex items-center gap-2 hover:text-primary transition-colors"
               >
                 Ver tudo <ChevronRight className="w-5 h-5" />

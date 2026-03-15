@@ -24,7 +24,8 @@ import {
   Upload,
   CreditCard,
   Download,
-  Printer
+  Printer,
+  Tag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -39,7 +40,7 @@ function cn(...inputs: ClassValue[]) {
 }
 
 export const AdminLoja = () => {
-  const [activeTab, setActiveTab] = useState<'produtos' | 'pedidos'>('produtos');
+  const [activeTab, setActiveTab] = useState<'produtos' | 'pedidos' | 'categorias'>('produtos');
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -51,8 +52,10 @@ export const AdminLoja = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -70,6 +73,11 @@ export const AdminLoja = () => {
     stripe_price_id: '',
     rating: 5.0,
     is_featured: false
+  });
+
+  const [categoryFormData, setCategoryFormData] = useState({
+    name: '',
+    slug: ''
   });
 
   useEffect(() => {
@@ -147,6 +155,64 @@ export const AdminLoja = () => {
       });
     }
     setIsModalOpen(true);
+  };
+
+  const handleOpenCategoryModal = (category: any = null) => {
+    if (category) {
+      setEditingCategory(category);
+      setCategoryFormData({
+        name: category.name,
+        slug: category.slug
+      });
+    } else {
+      setEditingCategory(null);
+      setCategoryFormData({
+        name: '',
+        slug: ''
+      });
+    }
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      if (editingCategory) {
+        const { error } = await supabase
+          .from('store_categories')
+          .update(categoryFormData)
+          .eq('id', editingCategory.id);
+        if (error) throw error;
+        toast.success('Categoria atualizada com sucesso!');
+      } else {
+        const { error } = await supabase
+          .from('store_categories')
+          .insert([categoryFormData]);
+        if (error) throw error;
+        toast.success('Categoria cadastrada com sucesso!');
+      }
+      setIsCategoryModalOpen(false);
+      fetchData();
+    } catch (err) {
+      console.error('Error saving category:', err);
+      toast.error('Erro ao salvar categoria');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta categoria? Isso pode afetar produtos vinculados.')) return;
+    try {
+      const { error } = await supabase.from('store_categories').delete().eq('id', id);
+      if (error) throw error;
+      toast.success('Categoria excluída com sucesso!');
+      fetchData();
+    } catch (err) {
+      console.error('Error deleting category:', err);
+      toast.error('Erro ao excluir categoria');
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -317,6 +383,15 @@ export const AdminLoja = () => {
               Produtos
             </button>
             <button 
+              onClick={() => setActiveTab('categorias')}
+              className={cn(
+                "px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs transition-all",
+                activeTab === 'categorias' ? "bg-white text-primary shadow-sm" : "text-secondary/40 hover:text-secondary"
+              )}
+            >
+              Categorias
+            </button>
+            <button 
               onClick={() => setActiveTab('pedidos')}
               className={cn(
                 "px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs transition-all",
@@ -343,6 +418,14 @@ export const AdminLoja = () => {
                 Novo Produto
               </button>
             </div>
+          ) : activeTab === 'categorias' ? (
+            <button 
+              onClick={() => handleOpenCategoryModal()}
+              className="bg-primary text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 transition-all shadow-lg shadow-primary/20"
+            >
+              <Plus className="w-5 h-5" />
+              Nova Categoria
+            </button>
           ) : (
             <button 
               onClick={handleExportOrders}
@@ -399,6 +482,11 @@ export const AdminLoja = () => {
                 <Package className="w-6 h-6 text-primary" />
                 Inventário de Produtos
               </>
+            ) : activeTab === 'categorias' ? (
+              <>
+                <Tag className="w-6 h-6 text-primary" />
+                Categorias da Loja
+              </>
             ) : (
               <>
                 <ClipboardList className="w-6 h-6 text-primary" />
@@ -410,7 +498,11 @@ export const AdminLoja = () => {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-secondary/20" />
             <input 
               type="text" 
-              placeholder={activeTab === 'produtos' ? "Buscar produtos..." : "Buscar pedidos..."}
+              placeholder={
+                activeTab === 'produtos' ? "Buscar produtos..." : 
+                activeTab === 'categorias' ? "Buscar categorias..." : 
+                "Buscar pedidos..."
+              }
               className="pl-12 pr-6 py-3 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all w-full md:w-80 font-bold text-secondary"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -419,7 +511,59 @@ export const AdminLoja = () => {
         </div>
 
         <div className="overflow-x-auto">
-          {activeTab === 'produtos' ? (
+          {activeTab === 'categorias' ? (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50/50">
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Nome</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40">Slug</th>
+                  <th className="px-8 py-6 text-[10px] font-black uppercase tracking-widest text-secondary/40 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {loading ? (
+                  <tr>
+                    <td colSpan={3} className="px-8 py-20 text-center">
+                      <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
+                    </td>
+                  </tr>
+                ) : categories.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-8 py-20 text-center text-secondary/40 font-bold">
+                      Nenhuma categoria encontrada.
+                    </td>
+                  </tr>
+                ) : (
+                  categories.map((category) => (
+                    <tr key={category.id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="px-8 py-6">
+                        <p className="font-black text-secondary">{category.name}</p>
+                      </td>
+                      <td className="px-8 py-6">
+                        <p className="text-secondary/60 font-mono text-xs">{category.slug}</p>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button 
+                            onClick={() => handleOpenCategoryModal(category)}
+                            className="p-2 text-secondary/20 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteCategory(category.id)}
+                            className="p-2 text-secondary/20 hover:text-danger hover:bg-danger/10 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : activeTab === 'produtos' ? (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50/50">
@@ -996,6 +1140,79 @@ export const AdminLoja = () => {
                   Fechar Detalhes
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Cadastro/Edição de Categoria */}
+      <AnimatePresence>
+        {isCategoryModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCategoryModalOpen(false)}
+              className="absolute inset-0 bg-secondary/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden flex flex-col"
+            >
+              <div className="p-10 border-b border-gray-50 flex justify-between items-center">
+                <div>
+                  <h3 className="text-3xl font-black text-secondary">
+                    {editingCategory ? 'Editar Categoria' : 'Nova Categoria'}
+                  </h3>
+                  <p className="text-secondary/40 font-medium">Gerencie as categorias da loja.</p>
+                </div>
+                <button onClick={() => setIsCategoryModalOpen(false)} className="p-4 bg-gray-50 rounded-2xl text-secondary/40 hover:text-danger transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveCategory} className="p-10 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Nome da Categoria</label>
+                  <input 
+                    required
+                    type="text"
+                    className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                    value={categoryFormData.name}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Slug (URL)</label>
+                  <input 
+                    required
+                    type="text"
+                    className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                    value={categoryFormData.slug}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
+                  />
+                </div>
+
+                <div className="pt-6 flex gap-4">
+                  <button 
+                    type="button"
+                    onClick={() => setIsCategoryModalOpen(false)}
+                    className="flex-1 px-8 py-4 bg-white text-secondary/60 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-100 transition-all border border-gray-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={isSaving}
+                    className="flex-1 px-8 py-4 bg-primary text-white rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                  >
+                    {isSaving ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : 'Salvar'}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}
