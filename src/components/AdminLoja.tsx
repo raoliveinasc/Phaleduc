@@ -67,7 +67,9 @@ export const AdminLoja = () => {
     stock_quantity: 0,
     is_subscription_activator: false,
     stripe_product_id: '',
-    stripe_price_id: ''
+    stripe_price_id: '',
+    rating: 5.0,
+    is_featured: false
   });
 
   useEffect(() => {
@@ -123,7 +125,9 @@ export const AdminLoja = () => {
         stock_quantity: product.stock_quantity || 0,
         is_subscription_activator: product.is_subscription_activator || false,
         stripe_product_id: product.stripe_product_id || '',
-        stripe_price_id: product.stripe_price_id || ''
+        stripe_price_id: product.stripe_price_id || '',
+        rating: product.rating || 5.0,
+        is_featured: product.is_featured || false
       });
     } else {
       setEditingProduct(null);
@@ -137,7 +141,9 @@ export const AdminLoja = () => {
         stock_quantity: 0,
         is_subscription_activator: false,
         stripe_product_id: '',
-        stripe_price_id: ''
+        stripe_price_id: '',
+        rating: 5.0,
+        is_featured: false
       });
     }
     setIsModalOpen(true);
@@ -358,7 +364,7 @@ export const AdminLoja = () => {
           <div>
             <p className="text-secondary/40 font-black uppercase text-[10px] tracking-widest">Total de Vendas</p>
             <p className="text-4xl font-black text-secondary">
-              {loading ? '...' : `R$ ${stats.totalSales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+              {loading ? '...' : `$ ${stats.totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
             </p>
           </div>
         </div>
@@ -460,7 +466,7 @@ export const AdminLoja = () => {
                         )}
                       </td>
                       <td className="px-8 py-6">
-                        <p className="font-bold text-secondary">R$ {(product.price_cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <p className="font-bold text-secondary">$ {(product.price_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                       </td>
                       <td className="px-8 py-6">
                         <span className="px-3 py-1 bg-gray-100 rounded-full text-[10px] font-black uppercase tracking-widest text-secondary/60">
@@ -548,7 +554,7 @@ export const AdminLoja = () => {
                       </td>
                       <td className="px-8 py-6">
                         <p className="font-black text-secondary">
-                          R$ {(order.total_amount_cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          $ {(order.total_amount_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </p>
                       </td>
                       <td className="px-8 py-6">
@@ -652,7 +658,7 @@ export const AdminLoja = () => {
                         value={formData.price_cents}
                         onChange={(e) => setFormData({ ...formData, price_cents: parseInt(e.target.value) || 0 })}
                       />
-                      <p className="text-[10px] text-secondary/40 ml-2">Ex: 1000 = R$ 10,00</p>
+                      <p className="text-[10px] text-secondary/40 ml-2">Ex: 1000 = $ 10.00</p>
                     </div>
 
                     {/* Estoque */}
@@ -735,6 +741,45 @@ export const AdminLoja = () => {
                         value={formData.stripe_price_id}
                         onChange={(e) => setFormData({ ...formData, stripe_price_id: e.target.value })}
                       />
+                    </div>
+
+                    {/* Avaliação */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Avaliação (0-5)</label>
+                      <input 
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="5"
+                        className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                        value={formData.rating}
+                        onChange={(e) => setFormData({ ...formData, rating: parseFloat(e.target.value) || 0 })}
+                      />
+                    </div>
+
+                    {/* Destaque */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Produto em Destaque?</label>
+                      <div 
+                        onClick={() => setFormData({ ...formData, is_featured: !formData.is_featured })}
+                        className={cn(
+                          "w-full px-6 py-4 rounded-2xl cursor-pointer flex items-center justify-between transition-all border-2",
+                          formData.is_featured 
+                            ? "bg-primary/5 border-primary text-primary" 
+                            : "bg-gray-50 border-transparent text-secondary/40"
+                        )}
+                      >
+                        <span className="font-bold">{formData.is_featured ? 'Sim, em destaque' : 'Não, produto normal'}</span>
+                        <div className={cn(
+                          "w-12 h-6 rounded-full relative transition-all",
+                          formData.is_featured ? "bg-primary" : "bg-gray-300"
+                        )}>
+                          <div className={cn(
+                            "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                            formData.is_featured ? "right-1" : "left-1"
+                          )} />
+                        </div>
+                      </div>
                     </div>
 
                     {/* Upload de Imagem */}
@@ -902,10 +947,10 @@ export const AdminLoja = () => {
                         <div key={idx} className="p-6 flex justify-between items-center bg-white">
                           <div>
                             <p className="font-black text-secondary">{item.name}</p>
-                            <p className="text-xs text-secondary/40 font-bold">{item.quantity}x R$ {(item.price / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            <p className="text-xs text-secondary/40 font-bold">{item.quantity}x $ {(item.price / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                           </div>
                           <p className="font-black text-primary">
-                            R$ {( (item.price * item.quantity) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            $ {( (item.price * item.quantity) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </p>
                         </div>
                       ))
@@ -915,7 +960,7 @@ export const AdminLoja = () => {
                     <div className="p-6 bg-gray-50 flex justify-between items-center">
                       <p className="font-black text-secondary uppercase tracking-widest text-xs">Total do Pedido</p>
                       <p className="text-2xl font-black text-secondary">
-                        R$ {(selectedOrder.total_amount_cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        $ {(selectedOrder.total_amount_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </p>
                     </div>
                   </div>

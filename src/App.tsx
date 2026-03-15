@@ -1053,52 +1053,47 @@ const DepoimentosPage = () => (
   </motion.div>
 );
 
-const STORE_CATEGORIES = [
-  { id: 1, title: 'Mala Rosa', desc: 'Kit de atividades físicas', icon: Package, color: 'bg-primary' },
-  { id: 2, title: 'Vestuário', desc: 'Camisetas e bonés', icon: ShoppingBag, color: 'bg-success' },
-  { id: 3, title: 'Educadores', desc: 'Materiais para franqueados', icon: GraduationCap, color: 'bg-secondary' },
-  { id: 4, title: 'Biblioteca', desc: 'Livros físicos curados', icon: BookOpen, color: 'bg-accent' },
-];
-
-const STORE_PRODUCTS = [
-  { 
-    id: 1, 
-    title: 'Boneco Hero Phaleduc', 
-    price: 29.90, 
-    rating: 5, 
-    image: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/mascote.png',
-    category: 'Brinquedos'
-  },
-  { 
-    id: 2, 
-    title: 'Camiseta Orgulho Brasileiro', 
-    price: 19.90, 
-    rating: 4.8, 
-    image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&q=80&w=400',
-    category: 'Vestuário'
-  },
-  { 
-    id: 3, 
-    title: 'Mala Rosa - Kit Completo', 
-    price: 89.00, 
-    rating: 5, 
-    image: 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&q=80&w=400',
-    category: 'Kits'
-  },
-  { 
-    id: 4, 
-    title: 'Planner do Educador PLH', 
-    price: 45.00, 
-    rating: 4.9, 
-    image: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&q=80&w=400',
-    category: 'Educadores'
-  },
-];
 
 const LojaPage = () => {
-  const [currency, setCurrency] = useState('USD');
+  const [currency] = useState('USD');
   const [cartCount, setCartCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [prodRes, catRes] = await Promise.all([
+          supabase.from('store_products').select('*, store_categories(name)').order('created_at', { ascending: false }),
+          supabase.from('store_categories').select('*').order('name')
+        ]);
+        
+        if (prodRes.data) setProducts(prodRes.data);
+        if (catRes.data) setCategories(catRes.data);
+      } catch (error) {
+        console.error('Error fetching store data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Map database categories to their visual styles
+  const categoryStyles: Record<string, { icon: any, color: string, desc: string }> = {
+    'mala-rosa': { icon: Package, color: 'bg-primary', desc: 'Kit de atividades físicas' },
+    'vestuario': { icon: ShoppingBag, color: 'bg-success', desc: 'Camisetas e bonés' },
+    'educadores': { icon: GraduationCap, color: 'bg-secondary', desc: 'Materiais para franqueados' },
+    'biblioteca': { icon: BookOpen, color: 'bg-accent', desc: 'Livros físicos curados' },
+  };
 
   return (
     <motion.div 
@@ -1132,21 +1127,8 @@ const LojaPage = () => {
             />
           </div>
 
-          {/* Currency & Cart - Right */}
+          {/* Cart - Right */}
           <div className="flex-shrink-0 flex items-center gap-4 min-w-[200px] justify-end">
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] font-black text-secondary/30 uppercase tracking-widest mb-1">Moeda</span>
-              <select 
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="bg-gray-50 px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest text-secondary focus:outline-none cursor-pointer border border-gray-100 hover:bg-white transition-colors"
-              >
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-                <option value="BRL">BRL (R$)</option>
-              </select>
-            </div>
-
             <button className="relative group">
               <div className="flex items-center gap-3 bg-secondary text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-secondary/20">
                 <Backpack className="w-5 h-5" />
@@ -1210,21 +1192,24 @@ const LojaPage = () => {
       {/* Category Grid */}
       <section className="py-24 max-w-7xl mx-auto px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {STORE_CATEGORIES.map((cat) => (
-            <motion.div 
-              key={cat.id}
-              whileHover={{ y: -10 }}
-              className="group cursor-pointer"
-            >
-              <div className={cn("aspect-square rounded-[40px] p-10 flex flex-col justify-between transition-all shadow-xl shadow-black/5", cat.color)}>
-                <cat.icon className="w-12 h-12 text-white" />
-                <div>
-                  <h3 className="text-2xl font-black text-white tracking-tight leading-none mb-2">{cat.title}</h3>
-                  <p className="text-white/70 text-sm font-medium">{cat.desc}</p>
+          {categories.map((cat) => {
+            const style = categoryStyles[cat.slug] || { icon: Package, color: 'bg-gray-400', desc: '' };
+            return (
+              <motion.div 
+                key={cat.id}
+                whileHover={{ y: -10 }}
+                className="group cursor-pointer"
+              >
+                <div className={cn("aspect-square rounded-[40px] p-10 flex flex-col justify-between transition-all shadow-xl shadow-black/5", style.color)}>
+                  <style.icon className="w-12 h-12 text-white" />
+                  <div>
+                    <h3 className="text-2xl font-black text-white tracking-tight leading-none mb-2">{cat.name}</h3>
+                    <p className="text-white/70 text-sm font-medium">{style.desc}</p>
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </div>
       </section>
 
@@ -1241,60 +1226,68 @@ const LojaPage = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {STORE_PRODUCTS.map((product) => (
-              <motion.div 
-                key={product.id}
-                whileHover={{ y: -5 }}
-                className="bg-white rounded-[40px] overflow-hidden shadow-xl shadow-black/5 group border border-transparent hover:border-primary/10 transition-all"
-              >
-                <div className="aspect-square overflow-hidden relative">
-                  <img 
-                    src={product.image} 
-                    alt={product.title} 
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute top-4 right-4">
-                    <button className="w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-secondary hover:text-primary transition-colors shadow-lg">
-                      <Heart className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-                <div className="p-8 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-black text-primary uppercase tracking-widest">{product.category}</span>
-                      <h3 className="text-lg font-black text-secondary tracking-tight leading-tight">{product.title}</h3>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Star className="w-3 h-3 text-yellow-400 fill-current" />
-                      <span className="text-xs font-black text-secondary">{product.rating}</span>
+          {loading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="w-12 h-12 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {filteredProducts.map((product) => (
+                <motion.div 
+                  key={product.id}
+                  whileHover={{ y: -5 }}
+                  className="bg-white rounded-[40px] overflow-hidden shadow-xl shadow-black/5 group border border-transparent hover:border-primary/10 transition-all"
+                >
+                  <div className="aspect-square overflow-hidden relative">
+                    <img 
+                      src={product.image_url || 'https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?auto=format&fit=crop&q=80&w=400'} 
+                      alt={product.name} 
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute top-4 right-4">
+                      <button className="w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-secondary hover:text-primary transition-colors shadow-lg">
+                        <Heart className="w-5 h-5" />
+                      </button>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-50">
-                    <span className="text-2xl font-black text-secondary">
-                      {currency === 'USD' ? '$' : currency === 'EUR' ? '€' : 'R$'} {product.price.toFixed(2)}
-                    </span>
+                  <div className="p-8 space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+                          {product.store_categories?.name || 'Geral'}
+                        </span>
+                        <h3 className="text-lg font-black text-secondary tracking-tight leading-tight">{product.name}</h3>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Star className="w-3 h-3 text-yellow-400 fill-current" />
+                        <span className="text-xs font-black text-secondary">{product.rating || '5.0'}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-50">
+                      <span className="text-2xl font-black text-secondary">
+                        $ {(product.price_cents / 100).toFixed(2)}
+                      </span>
+                      <button 
+                        onClick={() => setCartCount(prev => prev + 1)}
+                        className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
+                      >
+                        <Plus className="w-6 h-6" />
+                      </button>
+                    </div>
+                    
                     <button 
                       onClick={() => setCartCount(prev => prev + 1)}
-                      className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
+                      className="w-full py-4 bg-gray-50 text-secondary rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#FFD700] hover:text-secondary transition-all"
                     >
-                      <Plus className="w-6 h-6" />
+                      Quero para meu filho
                     </button>
                   </div>
-                  
-                  <button 
-                    onClick={() => setCartCount(prev => prev + 1)}
-                    className="w-full py-4 bg-gray-50 text-secondary rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#FFD700] hover:text-secondary transition-all"
-                  >
-                    Quero para meu filho
-                  </button>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

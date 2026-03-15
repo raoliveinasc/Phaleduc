@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS store_products (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     description TEXT,
-    price_cents INTEGER NOT NULL, -- Preço em centavos para Stripe
+    price_cents INTEGER NOT NULL, -- Preço em centavos para Stripe (USD)
     category_id UUID REFERENCES store_categories(id) ON DELETE SET NULL,
     image_url TEXT,
     type TEXT DEFAULT 'fisico', -- 'fisico' ou 'digital'
@@ -241,6 +241,8 @@ CREATE TABLE IF NOT EXISTS store_products (
     is_subscription_activator BOOLEAN DEFAULT FALSE,
     stripe_product_id TEXT,
     stripe_price_id TEXT,
+    rating DECIMAL(3,2) DEFAULT 5.0,
+    is_featured BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -267,17 +269,18 @@ CREATE POLICY "Allow all for store_categories" ON store_categories FOR ALL USING
 CREATE POLICY "Allow all for store_products" ON store_products FOR ALL USING (true);
 CREATE POLICY "Allow all for store_orders" ON store_orders FOR ALL USING (true);
 
--- Inserir categorias iniciais
+-- Inserir categorias iniciais seguindo a nomenclatura da Loja Virtual
 INSERT INTO store_categories (name, slug) VALUES 
-('Livros', 'livros'),
-('Brinquedos', 'brinquedos'),
-('Cursos', 'cursos'),
-('Acessórios', 'acessorios')
+('Mala Rosa', 'mala-rosa'),
+('Vestuário', 'vestuario'),
+('Educadores', 'educadores'),
+('Biblioteca', 'biblioteca')
+ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name;
 ON CONFLICT (slug) DO NOTHING;
 
 -- Inserir alguns pedidos de exemplo para o dashboard
 INSERT INTO store_orders (customer_name, customer_email, total_amount_cents, status, items) VALUES
-('João Silva', 'joao@email.com', 15000, 'pago', '[{"name": "Livro de Alfabetização", "price": 5000, "quantity": 3}]'),
-('Maria Oliveira', 'maria@email.com', 8990, 'pendente', '[{"name": "Kit de Jogos Pedagógicos", "price": 8990, "quantity": 1}]'),
-('Carlos Souza', 'carlos@email.com', 25000, 'pago', '[{"name": "Curso de Formação de Tutores", "price": 25000, "quantity": 1}]')
+('João Silva', 'joao@email.com', 1500, 'pago', '[{"name": "Livro de Alfabetização", "price": 500, "quantity": 3}]'),
+('Maria Oliveira', 'maria@email.com', 899, 'pendente', '[{"name": "Kit de Jogos Pedagógicos", "price": 899, "quantity": 1}]'),
+('Carlos Souza', 'carlos@email.com', 2500, 'pago', '[{"name": "Curso de Formação de Tutores", "price": 2500, "quantity": 1}]')
 ON CONFLICT DO NOTHING;
