@@ -1245,6 +1245,7 @@ const AssinaturasPage = () => {
 };
 
 const LojaPage = () => {
+  const navigate = useNavigate();
   const [currency] = useState('USD');
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<any[]>([]);
@@ -1403,6 +1404,17 @@ const LojaPage = () => {
           {/* Cart - Right */}
           <div className="flex-shrink-0 flex items-center gap-4 min-w-[200px] justify-end">
             <button 
+              onClick={() => navigate('/assinaturas')}
+              className="relative group"
+              title="Planos de Assinatura"
+            >
+              <div className="flex items-center gap-3 bg-primary/10 text-primary px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary/20 transition-all">
+                <Sparkles className="w-5 h-5" />
+                <span className="hidden xl:inline">Assinaturas</span>
+              </div>
+            </button>
+
+            <button 
               onClick={() => setIsCartOpen(true)}
               className="relative group"
             >
@@ -1430,6 +1442,13 @@ const LojaPage = () => {
               )}
             >
               Todos os Produtos
+            </button>
+            <button 
+              onClick={() => navigate('/assinaturas')}
+              className="text-xs font-black uppercase tracking-widest text-secondary/60 hover:text-primary transition-colors flex items-center gap-2"
+            >
+              <Sparkles className="w-3 h-3" />
+              Planos Phaleduc
             </button>
             {categories.map((cat) => (
               <button 
@@ -3288,6 +3307,7 @@ const AlunosPaisPage = () => {
         setUser({ id: family.id, email: family.email });
         setFamilyData(family);
         await loadFamilyData(family.id);
+        await checkSubscription(family.id);
 
         if (family.senha_temporaria && family.senha_temporaria === data.password) {
           setView('onboarding');
@@ -3321,6 +3341,7 @@ const AlunosPaisPage = () => {
     if (authData.user) {
       setUser(authData.user);
       const family = await loadFamilyData(authData.user.id);
+      await checkSubscription(authData.user.id);
       if (family?.senha_temporaria) {
         setView('onboarding');
         setOnboardingStep('password');
@@ -3403,6 +3424,7 @@ const AlunosPaisPage = () => {
     setUser(null);
     setProfiles([]);
     setFamilyData(null);
+    setSubscription(null);
     setView('login');
   };
 

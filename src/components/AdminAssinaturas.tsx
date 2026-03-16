@@ -48,10 +48,9 @@ export const AdminAssinaturas = () => {
   async function fetchSubscriptions() {
     setLoading(true);
     try {
-      // In a real app, we'd join with a profiles table to get names
       const { data, error } = await supabase
         .from('subscriptions')
-        .select('*')
+        .select('*, pais(nome, email)')
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -72,7 +71,7 @@ export const AdminAssinaturas = () => {
       const { data, error } = await supabase
         .from('alunos')
         .select('*')
-        .eq('pai_id', sub.user_id);
+        .eq('parent_id', sub.user_id);
       
       if (error) throw error;
       setLinkedStudents(data || []);
@@ -201,12 +200,12 @@ export const AdminAssinaturas = () => {
                   <tr key={sub.id} className="group hover:bg-gray-50/50 transition-colors">
                     <td className="px-8 py-6 border-b border-gray-50">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-secondary font-black">
-                          {sub.stripe_customer_id?.slice(0, 2).toUpperCase() || '??'}
+                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center text-primary font-black">
+                          {sub.pais?.nome?.charAt(0) || '?'}
                         </div>
                         <div>
-                          <p className="font-bold text-secondary">{sub.stripe_customer_id || 'Manual'}</p>
-                          <p className="text-[10px] text-secondary/40 font-mono">{sub.user_id.slice(0, 8)}</p>
+                          <p className="font-bold text-secondary">{sub.pais?.nome || 'Assinante'}</p>
+                          <p className="text-[10px] text-secondary/40 font-mono">{sub.pais?.email || sub.user_id}</p>
                         </div>
                       </div>
                     </td>
