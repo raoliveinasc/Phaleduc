@@ -306,7 +306,7 @@ const Hero = () => (
         className="space-y-8 md:space-y-12 text-center md:text-left order-1 md:order-2"
       >
         <div className="space-y-4 md:space-y-6">
-          <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-secondary leading-[0.9] tracking-tighter">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-secondary leading-[0.9] tracking-tighter">
             Aprender <br />
             português é <br />
             divertido!
@@ -364,7 +364,7 @@ const Features = () => (
             <feature.icon className={cn("w-12 h-12", feature.title === "Aquisição" ? "text-danger" : feature.title === "Manutenção" ? "text-success" : "text-primary")} />
           </div>
           
-          <h3 className="text-4xl font-black mb-6">{feature.title}</h3>
+          <h3 className="text-3xl font-black mb-6">{feature.title}</h3>
           <p className="text-lg font-bold leading-relaxed opacity-90">{feature.desc}</p>
         </motion.div>
       ))}
@@ -422,12 +422,12 @@ const TeacherIntro = () => (
           <span className="inline-block px-4 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-black uppercase tracking-widest">
             Fundadora & CEO
           </span>
-          <h2 className="text-5xl lg:text-7xl font-black text-secondary leading-[1.1]">
+          <h2 className="text-4xl lg:text-6xl font-black text-secondary leading-[1.1]">
             Olá, eu sou a <span className="text-primary">Teacher Ale!</span>
           </h2>
         </div>
         
-        <p className="text-xl lg:text-2xl text-secondary/70 font-medium leading-relaxed">
+        <p className="text-lg lg:text-xl text-secondary/70 font-medium leading-relaxed">
           Eu sou a Alessandra de Andrade, fundadora da PHALEDUC. Minha missão é conectar crianças brasileiras ao redor do mundo com suas raízes através da língua e cultura.
         </p>
         
@@ -743,7 +743,7 @@ const HomeReviews = () => (
   <section className="py-32 bg-gray-50">
     <div className="max-w-7xl mx-auto px-8">
       <div className="text-center mb-20">
-        <h2 className="text-6xl font-black text-secondary tracking-tight">Reviews</h2>
+        <h2 className="text-4xl font-black text-secondary tracking-tight">Reviews</h2>
       </div>
       <div className="grid md:grid-cols-2 gap-12">
         {[
@@ -778,7 +778,7 @@ const HomeReviews = () => (
 const HomeGalleryCTA = () => (
   <section className="py-32 bg-white">
     <div className="max-w-7xl mx-auto px-8 text-center space-y-12">
-      <h2 className="text-6xl font-black text-secondary tracking-tight">Nossas aventuras</h2>
+      <h2 className="text-4xl font-black text-secondary tracking-tight">Nossas aventuras</h2>
       <Link 
         to="/fotos" 
         className="inline-block bg-secondary text-white px-12 py-6 rounded-3xl font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl"
@@ -792,13 +792,13 @@ const HomeGalleryCTA = () => (
 const EnrollmentCTA = () => (
   <section className="py-32 bg-brand-green">
     <div className="max-w-4xl mx-auto px-8 text-center space-y-10">
-      <h2 className="text-6xl font-black text-secondary tracking-tight">Inscrições abertas</h2>
-      <p className="text-2xl text-secondary/80 font-medium leading-relaxed">
+      <h2 className="text-4xl font-black text-secondary tracking-tight">Inscrições abertas</h2>
+      <p className="text-lg text-secondary/80 font-medium leading-relaxed">
         Que tal despertar o prazer do seu filho em falar Português? Na Phaleduc, as aulas são desenvolvidas com temas variados com o objetivo de promover a língua portuguesa como língua de herança. As aulas são presenciais e focadas em compreensão, oralidade, aquisição de novos vocabulários e conexão entre os brasileirinhos.
       </p>
       <Link 
         to="/inscricao" 
-        className="inline-block bg-primary text-white px-16 py-8 rounded-3xl font-black text-2xl uppercase tracking-widest hover:scale-110 transition-all shadow-2xl shadow-primary/30"
+        className="inline-block bg-primary text-white px-16 py-8 rounded-3xl font-black text-xl uppercase tracking-widest hover:scale-110 transition-all shadow-2xl shadow-primary/30"
       >
         EU QUERO
       </Link>
@@ -809,7 +809,7 @@ const EnrollmentCTA = () => (
 const PageHeader = ({ title }: { title: string }) => (
   <section className="py-24 bg-gray-50 border-b border-gray-100">
     <div className="max-w-7xl mx-auto px-8">
-      <h1 className="text-7xl md:text-8xl font-black text-secondary tracking-tighter">{title}</h1>
+      <h1 className="text-5xl md:text-6xl font-black text-secondary tracking-tighter">{title}</h1>
     </div>
   </section>
 );
@@ -841,7 +841,7 @@ const SobrePage = () => (
           animate={{ opacity: 1, x: 0 }}
           className="space-y-8 lg:space-y-10 text-lg lg:text-xl text-secondary/80 leading-relaxed font-medium"
         >
-          <h3 className="text-4xl lg:text-5xl font-black text-secondary tracking-tight">Sobre a Ale</h3>
+          <h3 className="text-3xl lg:text-4xl font-black text-secondary tracking-tight">Sobre a Ale</h3>
           <p>Possui experiência de mais de 25 anos na area de educacao infantil e ensino fundamental, tendo atuado ao longo de sua carreira como Professora, Coordenadora Pedagógica e Diretora de Ensino em institucoes de ensino privada.</p>
           <p>Formada em Magistério, com Bacharel em Pedagogia, Pos Graduada em Educacao Infantil, possui Especializações em Praticas em Alfabetização, Distúrbios do Aprendizado e questões Bilingue e Português como Língua de Herança.</p>
           <p>Em sua trajetória profissional teve a oportunidade de implantar, reestruturar e desenvolver diferentes projetos pedagógicos, participar ativamente de processos estruturais decorrentes de mudanças na legislação de ensino e atuar no acolhimento de alunos brasileiros nascidos ou migrados no exterior em sua adaptação no retorno ao Brasil.</p>
@@ -861,8 +861,8 @@ const SobrePage = () => (
     <section className="py-32 bg-gray-50">
       <div className="max-w-7xl mx-auto px-8 space-y-20">
         <div className="text-center">
-          <h2 className="text-6xl font-black text-secondary">A Phaleduc</h2>
-          <p className="text-2xl text-secondary/60 mt-4 font-bold">Portuguese Heritage as Language Education</p>
+          <h2 className="text-4xl font-black text-secondary">A Phaleduc</h2>
+          <p className="text-xl text-secondary/60 mt-4 font-bold">Portuguese Heritage as Language Education</p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-12">
@@ -881,15 +881,15 @@ const SobrePage = () => (
             }
           ].map((item, i) => (
             <div key={i} className="bg-white p-12 rounded-[50px] shadow-xl border border-gray-100">
-              <h4 className="text-3xl font-black text-primary mb-6">{item.title}</h4>
+              <h4 className="text-2xl font-black text-primary mb-6">{item.title}</h4>
               <p className="text-lg font-medium text-secondary/70 leading-relaxed">{item.desc}</p>
             </div>
           ))}
         </div>
 
         <div className="bg-secondary text-white p-16 rounded-[60px] space-y-8">
-          <h3 className="text-4xl font-black">Por que manter o Português como Herança?</h3>
-          <p className="text-xl font-medium text-white/80 leading-relaxed">
+          <h3 className="text-3xl font-black">Por que manter o Português como Herança?</h3>
+          <p className="text-lg font-medium text-white/80 leading-relaxed">
             Além dos benefícios básicos como Fortalecimento dos laços familiares, Preservação da Cultura, e Diferencial Competitivo, o desenvolvimento da Língua Portuguesa auxilia as crianças nos desafios inerentes a socialização tais como facilitar Interação com outras crianças da mesma língua, adaptação junto à Comunidade da Língua Portuguesa Brasileira ou Reintegração em caso de retorno para seu país.
           </p>
         </div>
@@ -905,15 +905,15 @@ const AulasPage = () => (
       <div className="max-w-7xl mx-auto px-8 space-y-32">
         <div className="grid lg:grid-cols-2 gap-20 items-center">
           <div className="space-y-8">
-            <h2 className="text-6xl font-black text-secondary">4-13 anos</h2>
-            <p className="text-2xl text-secondary/70 font-medium leading-relaxed">
+            <h2 className="text-4xl font-black text-secondary">4-13 anos</h2>
+            <p className="text-xl text-secondary/70 font-medium leading-relaxed">
               Crianças entre 4 a 13 anos, nascidas no Brasil ou em outros países e que tenham o contato com a Língua Portuguesa em casa ou em comunidades Brasileiras.
             </p>
-            <h2 className="text-5xl font-black text-secondary pt-8">Metodologia de Ensino</h2>
-            <p className="text-xl text-secondary/70 font-medium leading-relaxed">
+            <h2 className="text-3xl font-black text-secondary pt-8">Metodologia de Ensino</h2>
+            <p className="text-lg text-secondary/70 font-medium leading-relaxed">
               Nosso método de ensino é desenvolvido unindo o dinamismo das tecnologias e a ludicidade que auxiliam no desenvolvimento do plano de ensino, ou seja, unimos educação + jogos + conteúdos digitais + praticidade para atingirmos nossos objetivos.
             </p>
-            <p className="text-xl text-secondary/70 font-medium leading-relaxed">
+            <p className="text-lg text-secondary/70 font-medium leading-relaxed">
               As aulas são divididas em três momentos que envolvem atividades de escrita, leitura e interpretação e jogo relacionado ao tema da aula.
             </p>
           </div>
@@ -926,23 +926,23 @@ const AulasPage = () => (
 
         <div className="grid lg:grid-cols-2 gap-20 items-center">
           <div className="order-2 lg:order-1 bg-gray-50 p-16 rounded-[60px]">
-            <h3 className="text-4xl font-black text-secondary mb-8">Conteúdo programático</h3>
-            <p className="text-xl text-secondary/70 font-medium leading-relaxed mb-6">
+            <h3 className="text-2xl font-black text-secondary mb-8">Conteúdo programático</h3>
+            <p className="text-lg text-secondary/70 font-medium leading-relaxed mb-6">
               O conteúdo programático é planejado abrangendo a cultura brasileira e suas datas comemorativas, as características da comunidade e demonstrações dos aspectos locais e de uma população.
             </p>
-            <p className="text-xl text-secondary/70 font-medium leading-relaxed">
+            <p className="text-lg text-secondary/70 font-medium leading-relaxed">
               A abordagem da pluralidade cultural do Brasil é enfatizada através de diferentes jogos e brincadeiras, gêneros textuais, conteúdos digitais e produções escritas.
             </p>
           </div>
           <div className="order-1 lg:order-2 space-y-8">
-            <h3 className="text-4xl font-black text-secondary">Desenvolvimento</h3>
+            <h3 className="text-2xl font-black text-secondary">Desenvolvimento</h3>
             <ul className="space-y-6">
               {[
                 "Participação ativa dos alunos no contexto de sua aprendizagem.",
                 "Percepção do papel do professor como facilitador efetivo e mediador do conhecimento.",
                 "Conteúdo de linguagem (oralidade e escrita) de acordo com o nível de aprendizagem do aluno."
               ].map((item, i) => (
-                <li key={i} className="flex items-start gap-4 text-xl font-bold text-secondary">
+                <li key={i} className="flex items-start gap-4 text-lg font-bold text-secondary">
                   <CheckCircle2 className="w-8 h-8 text-primary shrink-0" />
                   {item}
                 </li>
@@ -952,7 +952,7 @@ const AulasPage = () => (
         </div>
 
         <div className="space-y-16">
-          <h2 className="text-5xl font-black text-secondary text-center">Objetivos por Faixa Etária</h2>
+          <h2 className="text-3xl font-black text-secondary text-center">Objetivos por Faixa Etária</h2>
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
@@ -1040,11 +1040,11 @@ const DepoimentosPage = () => (
           ].map((review, i) => (
             <div key={i} className="bg-gray-50 p-16 rounded-[60px] space-y-8 relative">
               <Quote className="w-20 h-20 text-primary/10 absolute top-10 right-10" />
-              <p className="text-2xl italic font-medium text-secondary/80 leading-relaxed">"{review.text}"</p>
+              <p className="text-xl italic font-medium text-secondary/80 leading-relaxed">"{review.text}"</p>
               <div className="flex items-center gap-6">
                 <div className="w-20 h-20 bg-primary/20 rounded-full"></div>
                 <div>
-                  <h4 className="text-2xl font-black text-secondary">{review.author}</h4>
+                  <h4 className="text-xl font-black text-secondary">{review.author}</h4>
                   <p className="text-secondary/60 font-medium">{review.sub}</p>
                 </div>
               </div>
@@ -1128,11 +1128,11 @@ const AssinaturasPage = () => {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-white">
       <PageHeader title="Assinaturas" />
       
-      <section className="py-24">
+      <section className="py-16">
         <div className="max-w-7xl mx-auto px-8">
-          <div className="text-center max-w-3xl mx-auto mb-20 space-y-6">
-            <h2 className="text-5xl font-black text-secondary tracking-tighter">Escolha o plano ideal para sua <span className="text-primary">família</span></h2>
-            <p className="text-xl text-secondary/60 font-medium">Invista no futuro bilíngue do seu filho com o Método Phaleduc.</p>
+          <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
+            <h2 className="text-4xl font-black text-secondary tracking-tighter">Escolha o plano ideal para sua <span className="text-primary">família</span></h2>
+            <p className="text-lg text-secondary/60 font-medium">Invista no futuro bilíngue do seu filho com o Método Phaleduc.</p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
@@ -1143,7 +1143,7 @@ const AssinaturasPage = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1 }}
                 className={cn(
-                  "relative bg-white rounded-[40px] p-10 shadow-2xl border-2 flex flex-col",
+                  "relative bg-white rounded-[40px] p-8 shadow-2xl border-2 flex flex-col",
                   plan.popular ? "border-primary scale-105 z-10" : "border-gray-50"
                 )}
               >
@@ -1164,14 +1164,14 @@ const AssinaturasPage = () => {
                   </div>
 
                   <div className="flex items-baseline gap-1">
-                    <span className="text-5xl font-black text-secondary">{plan.price}</span>
+                    <span className="text-4xl font-black text-secondary">{plan.price}</span>
                     <span className="text-secondary/40 font-bold">{plan.period}</span>
                   </div>
 
-                  <ul className="space-y-4 pt-6">
+                  <ul className="space-y-3 pt-6">
                     {plan.features.map((feature, j) => (
                       <li key={j} className="flex items-center gap-3 text-secondary/70 font-bold text-sm">
-                        <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />
+                        <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
                         {feature}
                       </li>
                     ))}
@@ -1182,7 +1182,7 @@ const AssinaturasPage = () => {
                   onClick={() => handleSubscribe(plan)}
                   disabled={loading}
                   className={cn(
-                    "w-full py-6 rounded-3xl font-black uppercase tracking-widest mt-10 transition-all hover:scale-[1.02] shadow-xl",
+                    "w-full py-4 rounded-2xl font-black uppercase tracking-widest mt-8 transition-all hover:scale-[1.02] shadow-xl",
                     plan.buttonColor,
                     "text-white shadow-primary/20"
                   )}
@@ -1196,10 +1196,10 @@ const AssinaturasPage = () => {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-24 bg-gray-50">
+      <section className="py-16 bg-gray-50">
         <div className="max-w-4xl mx-auto px-8">
-          <div className="text-center mb-16 space-y-4">
-            <h2 className="text-4xl font-black text-secondary tracking-tighter">Perguntas Frequentes</h2>
+          <div className="text-center mb-12 space-y-3">
+            <h2 className="text-3xl font-black text-secondary tracking-tighter">Perguntas Frequentes</h2>
             <p className="text-secondary/60 font-medium">Tudo o que você precisa saber sobre o Método Phaleduc.</p>
           </div>
 
@@ -1487,10 +1487,10 @@ const LojaPage = () => {
             <span className="inline-block px-6 py-2 bg-primary text-white rounded-full font-black text-xs uppercase tracking-widest">
               Coleção 2026
             </span>
-            <h1 className="text-6xl md:text-8xl font-black text-white tracking-tighter leading-[0.9]">
+            <h1 className="text-5xl md:text-6xl font-black text-white tracking-tighter leading-[0.9]">
               Leve o Português para o <span className="text-primary">Mundo Real</span>
             </h1>
-            <p className="text-xl text-white/80 font-medium max-w-lg">
+            <p className="text-lg text-white/80 font-medium max-w-lg">
               Produtos pensados para fortalecer o bilinguismo de herança com afeto, diversão e muito orgulho brasileiro.
             </p>
             <button className="px-12 py-6 bg-[#FFD700] text-secondary rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-yellow-500/20 hover:scale-105 transition-all">
@@ -1506,9 +1506,7 @@ const LojaPage = () => {
           {categories.map((cat) => {
             const style = categoryStyles[cat.slug] || { icon: Package, color: 'bg-gray-400', desc: '' };
             return (
-              <motion.div 
-                key={cat.id}
-                whileHover={{ y: -10 }}
+              <button 
                 onClick={() => handleCategorySelect(cat.id)}
                 className="group cursor-pointer"
               >
@@ -1519,11 +1517,11 @@ const LojaPage = () => {
                 )}>
                   <style.icon className="w-12 h-12 text-white" />
                   <div>
-                    <h3 className="text-2xl font-black text-white tracking-tight leading-none mb-2">{cat.name}</h3>
+                    <h3 className="text-xl font-black text-white tracking-tight leading-none mb-2">{cat.name}</h3>
                     <p className="text-white/70 text-sm font-medium">{style.desc}</p>
                   </div>
                 </div>
-              </motion.div>
+              </button>
             );
           })}
         </div>
@@ -1537,7 +1535,7 @@ const LojaPage = () => {
               <span className="text-primary font-black uppercase tracking-widest text-xs">
                 {selectedCategory ? categories.find(c => c.id === selectedCategory)?.name : 'Os mais amados'}
               </span>
-              <h2 className="text-5xl font-black text-secondary tracking-tighter">
+              <h2 className="text-4xl font-black text-secondary tracking-tighter">
                 {selectedCategory ? 'Explorar Coleção' : 'Favoritos da Turminha'}
               </h2>
             </div>
@@ -1948,10 +1946,10 @@ const BlogPage = () => {
                     <span>•</span>
                     <span className="text-secondary/40">{post.date}</span>
                   </div>
-                  <h2 className="text-4xl font-black text-secondary group-hover:text-primary transition-colors leading-tight">
+                  <h2 className="text-2xl font-black text-secondary group-hover:text-primary transition-colors leading-tight">
                     <a href={post.link} target="_blank">{post.title}</a>
                   </h2>
-                  <p className="text-xl text-secondary/60 font-medium leading-relaxed">{post.excerpt}</p>
+                  <p className="text-lg text-secondary/60 font-medium leading-relaxed">{post.excerpt}</p>
                   <a href={post.link} target="_blank" className="inline-flex items-center gap-2 text-primary font-black uppercase tracking-widest hover:gap-4 transition-all">
                     Ler mais <ChevronRight className="w-5 h-5" />
                   </a>
@@ -1962,7 +1960,7 @@ const BlogPage = () => {
 
           <aside className="space-y-12">
             <div className="bg-gray-50 p-10 rounded-[40px] space-y-8">
-              <h4 className="text-2xl font-black text-secondary">Pesquisar</h4>
+              <h4 className="text-xl font-black text-secondary">Pesquisar</h4>
               <div className="relative">
                 <input type="text" placeholder="Buscar no blog..." className="w-full p-5 rounded-2xl bg-white border-2 border-transparent focus:border-primary outline-none font-bold shadow-sm" />
                 <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-secondary/40" />
@@ -1970,11 +1968,11 @@ const BlogPage = () => {
             </div>
 
             <div className="space-y-8">
-              <h4 className="text-2xl font-black text-secondary">Artigos Recentes</h4>
+              <h4 className="text-xl font-black text-secondary">Artigos Recentes</h4>
               <ul className="space-y-4">
                 {posts.map((post, i) => (
                   <li key={i}>
-                    <a href={post.link} target="_blank" className="text-lg font-bold text-secondary/70 hover:text-primary transition-colors leading-tight block">
+                    <a href={post.link} target="_blank" className="text-base font-bold text-secondary/70 hover:text-primary transition-colors leading-tight block">
                       {post.title}
                     </a>
                   </li>
@@ -1983,11 +1981,11 @@ const BlogPage = () => {
             </div>
 
             <div className="space-y-8">
-              <h4 className="text-2xl font-black text-secondary">Categorias</h4>
+              <h4 className="text-xl font-black text-secondary">Categorias</h4>
               <ul className="space-y-4">
                 {["Aprendizado", "Dicas", "Sobre"].map((cat, i) => (
                   <li key={i}>
-                    <a href="#" className="flex justify-between items-center text-lg font-bold text-secondary/70 hover:text-primary transition-colors">
+                    <a href="#" className="flex justify-between items-center text-base font-bold text-secondary/70 hover:text-primary transition-colors">
                       {cat}
                       <span className="bg-primary/10 text-primary px-3 py-1 rounded-lg text-sm">1</span>
                     </a>
@@ -2080,10 +2078,10 @@ const InscricaoPage = () => {
                     Mais Popular
                   </span>
                 )}
-                <h3 className="text-3xl font-black mb-4">{plan.name}</h3>
+                <h3 className="text-2xl font-black mb-4">{plan.name}</h3>
                 <div className="flex items-baseline gap-2 mb-10">
-                  <span className="text-5xl font-black">${plan.price}</span>
-                  {plan.price !== "Diversos" && <span className="text-xl opacity-60 font-bold">/ mensal</span>}
+                  <span className="text-4xl font-black">${plan.price}</span>
+                  {plan.price !== "Diversos" && <span className="text-lg opacity-60 font-bold">/ mensal</span>}
                 </div>
                 <ul className="space-y-6 mb-12 flex-grow">
                   {plan.features.map((feature, j) => (
@@ -2122,8 +2120,8 @@ const ContatoPage = () => (
     <section className="py-32 bg-white">
       <div className="max-w-7xl mx-auto px-8 grid lg:grid-cols-2 gap-20">
         <div className="space-y-12">
-          <h2 className="text-6xl font-black text-secondary tracking-tight">Vamos Conversar?</h2>
-          <p className="text-2xl text-secondary/70 font-medium leading-relaxed">
+          <h2 className="text-4xl font-black text-secondary tracking-tight">Vamos Conversar?</h2>
+          <p className="text-lg text-secondary/70 font-medium leading-relaxed">
             Tire suas dúvidas sobre matrículas, horários e nossa metodologia.
           </p>
           <div className="space-y-8">
@@ -2133,7 +2131,7 @@ const ContatoPage = () => (
               </div>
               <div>
                 <p className="text-sm font-black uppercase text-secondary/40">Telefone</p>
-                <p className="text-3xl font-black text-secondary">469-476-6590</p>
+                <p className="text-2xl font-black text-secondary">469-476-6590</p>
               </div>
             </div>
             <div className="flex items-center gap-8">
@@ -2142,7 +2140,7 @@ const ContatoPage = () => (
               </div>
               <div>
                 <p className="text-sm font-black uppercase text-secondary/40">E-mail</p>
-                <p className="text-3xl font-black text-secondary">contato@phaleduc.com</p>
+                <p className="text-2xl font-black text-secondary">contato@phaleduc.com</p>
               </div>
             </div>
           </div>
@@ -2169,8 +2167,8 @@ const GamesPlatform = () => (
     <section className="py-32 bg-white">
       <div className="max-w-7xl mx-auto px-8 text-center space-y-12">
         <Gamepad2 className="w-32 h-32 text-primary mx-auto opacity-20" />
-        <h2 className="text-5xl font-black text-secondary">Em breve: Novas Aventuras!</h2>
-        <p className="text-2xl text-secondary/70 font-medium max-w-2xl mx-auto">
+        <h2 className="text-3xl font-black text-secondary">Em breve: Novas Aventuras!</h2>
+        <p className="text-lg text-secondary/70 font-medium max-w-2xl mx-auto">
           Estamos preparando uma plataforma incrível com jogos exclusivos para a turminha Phaleduc.
         </p>
       </div>
@@ -2366,12 +2364,13 @@ const ChildRegistrationView = ({
       if (!parentExists) {
         console.log("Registro de pai não encontrado ou invisível, tentando garantir existência...");
         const { data: userData } = await supabase.auth.getUser();
+        const userFullName = userData.user?.user_metadata?.full_name || "Responsável";
         const { error: createParentError } = await supabase
           .from('pais')
           .insert([{
             id: parentId,
             email: userData.user?.email || '',
-            nome: "Responsável",
+            nome: userFullName,
             parent_pin: '0000'
           }]);
         
@@ -2407,20 +2406,8 @@ const ChildRegistrationView = ({
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)] bg-gray-50 relative"
+      className="flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)] bg-gray-50"
     >
-      <div className="absolute top-8 right-8">
-        <button 
-          onClick={async () => {
-            await supabase.auth.signOut();
-            window.location.reload();
-          }}
-          className="flex items-center gap-2 px-6 py-3 bg-white text-danger rounded-2xl font-black text-xs uppercase tracking-widest shadow-sm hover:shadow-md transition-all border border-gray-100"
-        >
-          <LogOut className="w-4 h-4" /> Sair da Conta
-        </button>
-      </div>
-
       <div className="max-w-2xl w-full bg-white rounded-[40px] p-12 shadow-2xl border border-gray-100">
         <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
           <PlusCircle className="w-10 h-10" />
@@ -2616,6 +2603,7 @@ const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (
 
 const RegisterView = ({ onRegister, onSwitchToLogin }: { onRegister: (data: any) => void, onSwitchToLogin: () => void }) => {
   const [formData, setFormData] = useState({
+    nome: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -2624,6 +2612,10 @@ const RegisterView = ({ onRegister, onSwitchToLogin }: { onRegister: (data: any)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.nome.trim()) {
+      alert("Por favor, informe seu nome.");
+      return;
+    }
     if (formData.password !== formData.confirmPassword) {
       alert("As senhas não coincidem!");
       return;
@@ -2650,6 +2642,17 @@ const RegisterView = ({ onRegister, onSwitchToLogin }: { onRegister: (data: any)
         <p className="text-secondary/50 text-center mb-10 font-medium">Comece sua jornada bilingue hoje mesmo.</p>
         
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Seu Nome Completo</label>
+            <input 
+              type="text" 
+              required
+              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+              placeholder="Ex: João Silva"
+              value={formData.nome}
+              onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+            />
+          </div>
           <div className="space-y-1">
             <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">E-mail</label>
             <input 
@@ -2691,7 +2694,7 @@ const RegisterView = ({ onRegister, onSwitchToLogin }: { onRegister: (data: any)
               type="password" 
               maxLength={4}
               required
-              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-black text-secondary text-center tracking-[1em]"
+              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-black text-secondary text-center tracking-[1em]"
               placeholder="••••"
               value={formData.parentPin}
               onChange={(e) => setFormData({ ...formData, parentPin: e.target.value })}
@@ -2702,13 +2705,13 @@ const RegisterView = ({ onRegister, onSwitchToLogin }: { onRegister: (data: any)
             type="submit"
             className="w-full py-5 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20 mt-4"
           >
-            Criar Minha Conta
+            Criar Conta Familiar
           </button>
         </form>
         
         <div className="mt-8 pt-8 border-t border-gray-100 text-center">
           <p className="text-xs text-secondary/40 font-medium">
-            Já tem uma conta? <button onClick={onSwitchToLogin} className="text-primary font-black hover:underline">Fazer Login</button>
+            Já tem uma conta? <button onClick={onSwitchToLogin} className="text-primary font-black hover:underline">Fazer login</button>
           </p>
         </div>
       </div>
@@ -3044,12 +3047,13 @@ const AlunosPaisPage = () => {
       if (!family) {
         console.log("Registro de responsável não visível ou inexistente. Tentando garantir existência...");
         const { data: userData } = await supabase.auth.getUser();
+        const userFullName = userData.user?.user_metadata?.full_name || "Responsável";
         const { data: newFamily, error: insertError } = await supabase
           .from('pais')
           .insert([{
             id: userId,
             email: userData.user?.email || '',
-            nome: "Responsável",
+            nome: userFullName,
             parent_pin: '0000'
           }])
           .select()
@@ -3061,7 +3065,7 @@ const AlunosPaisPage = () => {
             console.log("Registro de responsável já existe (conflito 409 ignorado).");
             // Tentar buscar novamente, se falhar, assumimos que existe mas RLS bloqueia leitura
             const { data: retryFamily } = await supabase.from('pais').select('*').eq('id', userId).maybeSingle();
-            family = retryFamily || { id: userId, nome: "Responsável" };
+            family = retryFamily || { id: userId, nome: userFullName };
           } else {
             console.error("Erro ao criar registro de responsável:", insertError);
           }
@@ -3467,6 +3471,11 @@ const AlunosPaisPage = () => {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
+      options: {
+        data: {
+          full_name: data.nome
+        }
+      }
     });
 
     if (authError) {
@@ -3483,7 +3492,7 @@ const AlunosPaisPage = () => {
           { 
             id: authData.user.id, 
             email: data.email, 
-            nome: "Responsável", // Placeholder inicial
+            nome: data.nome, 
             parent_pin: data.parentPin 
           }
         ]);
