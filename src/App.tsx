@@ -1064,7 +1064,7 @@ const AssinaturasPage = () => {
     {
       id: 'mensal',
       name: 'Plano Mensal',
-      price: 'R$ 97',
+      price: '$ 19.90',
       period: '/mês',
       description: 'Ideal para experimentar o método.',
       features: ['Acesso total ao Método', 'Área de Atividades Exclusiva', 'Suporte Pedagógico'],
@@ -1075,7 +1075,7 @@ const AssinaturasPage = () => {
     {
       id: 'semestral',
       name: 'Plano Semestral',
-      price: 'R$ 497',
+      price: '$ 99.00',
       period: '/6 meses',
       description: 'O melhor custo-benefício para sua família.',
       features: ['Acesso total ao Método', 'Área de Atividades Exclusiva', 'Suporte Pedagógico', 'Desconto de 15%'],
@@ -1087,7 +1087,7 @@ const AssinaturasPage = () => {
     {
       id: 'anual',
       name: 'Plano Anual',
-      price: 'R$ 897',
+      price: '$ 179.00',
       period: '/ano',
       description: 'Compromisso total com o bilinguismo.',
       features: ['Acesso total ao Método', 'Área de Atividades Exclusiva', 'Suporte Pedagógico', 'Desconto de 25%', 'Mentoria em Grupo'],
@@ -2352,6 +2352,10 @@ const ChildRegistrationView = ({
 
     setIsSaving(true);
     try {
+      if (!parentId) {
+        throw new Error("Sessão expirada ou usuário não identificado. Por favor, saia e entre novamente.");
+      }
+
       const childrenToInsert = children.map(c => ({
         parent_id: parentId,
         nome: c.name,
@@ -2366,9 +2370,9 @@ const ChildRegistrationView = ({
 
       if (error) throw error;
       onSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error registering children:", err);
-      alert("Erro ao cadastrar crianças.");
+      alert("Erro ao cadastrar crianças: " + (err.message || "Erro desconhecido"));
     } finally {
       setIsSaving(false);
     }
@@ -2992,10 +2996,28 @@ const AlunosPaisPage = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setUser(session.user);
-        await checkSubscription(session.user.id);
-        const family = await loadFamilyData(session.user.id);
         
-        if (family?.senha_temporaria) {
+        // Garantir que o registro na tabela 'pais' existe
+        const { data: family, error: fError } = await supabase
+          .from('pais')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        
+        if (!family) {
+          // Criar registro faltante se necessário
+          await supabase.from('pais').insert([{
+            id: session.user.id,
+            email: session.user.email,
+            nome: "Responsável",
+            parent_pin: '0000' // PIN padrão se estiver faltando
+          }]);
+        }
+
+        await checkSubscription(session.user.id);
+        const familyData = await loadFamilyData(session.user.id);
+        
+        if (familyData?.senha_temporaria) {
           setView('onboarding');
           setOnboardingStep('password');
         } else {
@@ -3534,8 +3556,17 @@ const AlunosPaisPage = () => {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="bg-gray-50 min-h-[calc(100vh-112px)] py-20 px-8"
+            className="bg-gray-50 min-h-[calc(100vh-112px)] py-20 px-8 relative"
           >
+            {/* Logout Button for Onboarding */}
+            <button 
+              onClick={handleLogout}
+              className="absolute top-8 right-8 flex items-center gap-2 px-4 py-2 bg-white rounded-xl text-secondary/40 hover:text-danger hover:bg-danger/5 transition-all font-bold text-xs shadow-sm"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sair da Conta</span>
+            </button>
+
             <div className="max-w-4xl mx-auto">
               <div className="flex justify-center gap-4 mb-12">
                 {[

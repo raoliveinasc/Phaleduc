@@ -124,19 +124,20 @@ const AdminSidebar = () => {
 };
 
 const AdminDashboard = () => {
-  const [stats, setStats] = useState({ pais: 0, alunos: 0, tutores: 0, turmas: 0, biblioteca: 0 });
+  const [stats, setStats] = useState({ pais: 0, alunos: 0, tutores: 0, turmas: 0, biblioteca: 0, assinaturas: 0 });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [paisCount, alunosCount, tutoresCount, turmasCount, bibliotecaCount] = await Promise.all([
+        const [paisCount, alunosCount, tutoresCount, turmasCount, bibliotecaCount, assinaturasCount] = await Promise.all([
           supabase.from('pais').select('*', { count: 'exact', head: true }),
           supabase.from('alunos').select('*', { count: 'exact', head: true }),
           supabase.from('tutores').select('*', { count: 'exact', head: true }),
           supabase.from('turmas').select('*', { count: 'exact', head: true }),
           supabase.from('biblioteca_recursos').select('*', { count: 'exact', head: true }),
+          supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
         ]);
 
         setStats({
@@ -145,6 +146,7 @@ const AdminDashboard = () => {
           tutores: tutoresCount.count || 0,
           turmas: turmasCount.count || 0,
           biblioteca: bibliotecaCount.count || 0,
+          assinaturas: assinaturasCount.count || 0,
         });
       } catch (err) {
         console.error('Error fetching stats:', err);
@@ -158,6 +160,7 @@ const AdminDashboard = () => {
   const cards = [
     { name: 'Turmas Ativas', value: stats.turmas, icon: Layout, color: 'bg-indigo-500', path: '/admin/turmas' },
     { name: 'Recursos na Biblioteca', value: stats.biblioteca, icon: Library, color: 'bg-emerald-500', path: '/admin/biblioteca' },
+    { name: 'Assinaturas Ativas', value: stats.assinaturas, icon: CreditCard, color: 'bg-rose-500', path: '/admin/assinaturas' },
     { name: 'Pais Cadastrados', value: stats.pais, icon: Users, color: 'bg-blue-500', path: '/admin/pais' },
     { name: 'Alunos Ativos', value: stats.alunos, icon: Backpack, color: 'bg-primary', path: '/admin/alunos' },
     { name: 'Tutores Certificados', value: stats.tutores, icon: GraduationCap, color: 'bg-orange-500', path: '/admin/tutores' },
@@ -199,9 +202,9 @@ const AdminDashboard = () => {
               <UserPlus className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
               <span className="font-bold text-secondary text-sm">Novo Pai</span>
             </Link>
-            <Link to="/admin/alunos" className="p-6 bg-gray-50 rounded-3xl flex flex-col items-center text-center gap-3 hover:bg-primary/5 transition-all group">
-              <PlusCircle className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
-              <span className="font-bold text-secondary text-sm">Novo Aluno</span>
+            <Link to="/admin/assinaturas" className="p-6 bg-gray-50 rounded-3xl flex flex-col items-center text-center gap-3 hover:bg-primary/5 transition-all group">
+              <CreditCard className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
+              <span className="font-bold text-secondary text-sm">Assinaturas</span>
             </Link>
           </div>
         </div>
