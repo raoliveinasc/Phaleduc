@@ -3067,7 +3067,7 @@ const AlunosPaisPage = () => {
       .from('pais')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
     
     if (family) setFamilyData(family);
 
