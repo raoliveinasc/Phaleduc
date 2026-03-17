@@ -2364,7 +2364,7 @@ const ChildRegistrationView = ({
         .maybeSingle();
 
       if (!parentExists) {
-        console.log("Registro de pai não encontrado, criando agora...");
+        console.log("Registro de pai não encontrado ou invisível, tentando garantir existência...");
         const { data: userData } = await supabase.auth.getUser();
         const { error: createParentError } = await supabase
           .from('pais')
@@ -2375,7 +2375,7 @@ const ChildRegistrationView = ({
             parent_pin: '0000'
           }]);
         
-        if (createParentError) {
+        if (createParentError && !createParentError.message?.includes('409') && createParentError.code !== '23505') {
           throw new Error("Não foi possível preparar seu perfil de responsável. Por favor, tente sair e entrar novamente.");
         }
       }
@@ -2407,8 +2407,20 @@ const ChildRegistrationView = ({
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)] bg-gray-50"
+      className="flex flex-col items-center justify-center py-20 px-8 min-h-[calc(100vh-112px)] bg-gray-50 relative"
     >
+      <div className="absolute top-8 right-8">
+        <button 
+          onClick={async () => {
+            await supabase.auth.signOut();
+            window.location.reload();
+          }}
+          className="flex items-center gap-2 px-6 py-3 bg-white text-danger rounded-2xl font-black text-xs uppercase tracking-widest shadow-sm hover:shadow-md transition-all border border-gray-100"
+        >
+          <LogOut className="w-4 h-4" /> Sair da Conta
+        </button>
+      </div>
+
       <div className="max-w-2xl w-full bg-white rounded-[40px] p-12 shadow-2xl border border-gray-100">
         <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
           <PlusCircle className="w-10 h-10" />
@@ -3016,54 +3028,104 @@ const AlunosPaisPage = () => {
   }, [profiles]);
 
   // Verificar sessão ao carregar
+  const syncDataAndNavigate = async (userId: string) => {
+    setLoading(true);
+    try {
+      console.log("Sincronizando dados para usuário:", userId);
+      // 1. Garantir registro em 'pais'
+      let { data: family, error: fError } = await supabase
+        .from('pais')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      if (fError) console.error("Erro ao buscar dados da família:", fError);
+
+      if (!family) {
+        console.log("Registro de responsável não visível ou inexistente. Tentando garantir existência...");
+        const { data: userData } = await supabase.auth.getUser();
+        const { data: newFamily, error: insertError } = await supabase
+          .from('pais')
+          .insert([{
+            id: userId,
+            email: userData.user?.email || '',
+            nome: "Responsável",
+            parent_pin: '0000'
+          }])
+          .select()
+          .maybeSingle();
+        
+        if (insertError) {
+          // Se o erro for 409, o registro já existe, podemos ignorar o erro de inserção
+          if (insertError.code === '23505' || insertError.message?.includes('409')) {
+            console.log("Registro de responsável já existe (conflito 409 ignorado).");
+            // Tentar buscar novamente, se falhar, assumimos que existe mas RLS bloqueia leitura
+            const { data: retryFamily } = await supabase.from('pais').select('*').eq('id', userId).maybeSingle();
+            family = retryFamily || { id: userId, nome: "Responsável" };
+          } else {
+            console.error("Erro ao criar registro de responsável:", insertError);
+          }
+        } else if (newFamily) {
+          family = newFamily;
+        }
+      }
+
+      if (family) setFamilyData(family);
+
+      // 2. Carregar crianças
+      const { data: childProfiles, error: pError } = await supabase
+        .from('alunos')
+        .select('*')
+        .eq('parent_id', userId);
+      
+      if (pError) {
+        console.error("Erro ao buscar perfis de alunos:", pError);
+        alert("Erro ao carregar perfis de alunos: " + pError.message);
+      }
+      
+      const currentProfiles = childProfiles || [];
+      console.log("Alunos encontrados:", currentProfiles.length);
+      setProfiles(currentProfiles);
+      
+      // 3. Verificar Assinatura
+      await checkSubscription(userId);
+
+      // 4. Decidir destino
+      if (family?.senha_temporaria) {
+        console.log("Redirecionando para onboarding: senha temporária");
+        setView('onboarding');
+        setOnboardingStep('password');
+      } else if (currentProfiles.length === 0) {
+        console.log("Redirecionando para onboarding: sem crianças");
+        setView('onboarding');
+        setOnboardingStep('children');
+      } else {
+        console.log("Redirecionando para perfis");
+        setView('profiles');
+      }
+    } catch (err) {
+      console.error("Erro crítico na sincronização:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setUser(session.user);
-        
-        // Garantir que o registro na tabela 'pais' existe
-        const { data: family, error: fError } = await supabase
-          .from('pais')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle();
-        
-        if (!family) {
-          // Criar registro faltante se necessário
-          await supabase.from('pais').insert([{
-            id: session.user.id,
-            email: session.user.email,
-            nome: "Responsável",
-            parent_pin: '0000' // PIN padrão se estiver faltando
-          }]);
-        }
-
-        await checkSubscription(session.user.id);
-        const familyData = await loadFamilyData(session.user.id);
-        
-        if (familyData?.senha_temporaria) {
-          setView('onboarding');
-          setOnboardingStep('password');
-        } else {
-          // Verificar se tem crianças
-          const { data: children } = await supabase.from('alunos').select('id').eq('parent_id', session.user.id);
-          if (!children || children.length === 0) {
-            setView('onboarding');
-            setOnboardingStep('children');
-          } else {
-            setView('profiles');
-          }
-        }
+        await syncDataAndNavigate(session.user.id);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     };
     checkSession();
   }, []);
 
   const loadFamilyData = async (userId: string) => {
-    // 1. Carregar dados da família (PIN, etc)
-    const { data: family, error: fError } = await supabase
+    // Esta função agora é usada apenas para recarregar dados sem navegar
+    const { data: family } = await supabase
       .from('pais')
       .select('*')
       .eq('id', userId)
@@ -3071,8 +3133,7 @@ const AlunosPaisPage = () => {
     
     if (family) setFamilyData(family);
 
-    // 2. Carregar perfis das crianças
-    const { data: childProfiles, error: pError } = await supabase
+    const { data: childProfiles } = await supabase
       .from('alunos')
       .select('*')
       .eq('parent_id', userId);
@@ -3352,23 +3413,7 @@ const AlunosPaisPage = () => {
       
       if (isValidPassword) {
         setUser({ id: family.id, email: family.email });
-        setFamilyData(family);
-        await loadFamilyData(family.id);
-        await checkSubscription(family.id);
-
-        if (family.senha_temporaria && family.senha_temporaria === data.password) {
-          setView('onboarding');
-          setOnboardingStep('password');
-        } else {
-          const { data: children } = await supabase.from('alunos').select('id').eq('parent_id', family.id);
-          if (!children || children.length === 0) {
-            setView('onboarding');
-            setOnboardingStep('children');
-          } else {
-            setView('profiles');
-          }
-        }
-        setLoading(false);
+        await syncDataAndNavigate(family.id);
         return;
       }
     }
@@ -3387,20 +3432,7 @@ const AlunosPaisPage = () => {
 
     if (authData.user) {
       setUser(authData.user);
-      const family = await loadFamilyData(authData.user.id);
-      await checkSubscription(authData.user.id);
-      if (family?.senha_temporaria) {
-        setView('onboarding');
-        setOnboardingStep('password');
-      } else {
-        const { data: children } = await supabase.from('alunos').select('id').eq('parent_id', authData.user.id);
-        if (!children || children.length === 0) {
-          setView('onboarding');
-          setOnboardingStep('children');
-        } else {
-          setView('profiles');
-        }
-      }
+      await syncDataAndNavigate(authData.user.id);
     }
     setLoading(false);
   };
