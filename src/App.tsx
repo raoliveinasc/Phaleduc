@@ -2356,10 +2356,35 @@ const ChildRegistrationView = ({
         throw new Error("Sessão expirada ou usuário não identificado. Por favor, saia e entre novamente.");
       }
 
+      // 1. Garantir ABSOLUTAMENTE que o registro na tabela 'pais' existe antes de inserir o aluno
+      const { data: parentExists, error: checkError } = await supabase
+        .from('pais')
+        .select('id')
+        .eq('id', parentId)
+        .maybeSingle();
+
+      if (!parentExists) {
+        console.log("Registro de pai não encontrado, criando agora...");
+        const { data: userData } = await supabase.auth.getUser();
+        const { error: createParentError } = await supabase
+          .from('pais')
+          .insert([{
+            id: parentId,
+            email: userData.user?.email || '',
+            nome: "Responsável",
+            parent_pin: '0000'
+          }]);
+        
+        if (createParentError) {
+          throw new Error("Não foi possível preparar seu perfil de responsável. Por favor, tente sair e entrar novamente.");
+        }
+      }
+
+      // 2. Agora sim, inserir as crianças
       const childrenToInsert = children.map(c => ({
         parent_id: parentId,
         nome: c.name,
-        data_nascimento: new Date(new Date().getFullYear() - parseInt(c.age), 0, 1).toISOString().split('T')[0], // Estimativa baseada na idade
+        data_nascimento: new Date(new Date().getFullYear() - parseInt(c.age), 0, 1).toISOString().split('T')[0],
         nivel: 'Iniciante',
         status: 'ativo'
       }));
