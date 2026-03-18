@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS alunos (
     avatar TEXT,
     observacoes TEXT,
     senha_temporaria TEXT,
-    parent_id UUID REFERENCES pais(id) ON DELETE CASCADE,
-    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
+    parent_id UUID REFERENCES pais(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL ON UPDATE CASCADE,
     turma_id UUID REFERENCES turmas(id) ON DELETE SET NULL,
     status TEXT DEFAULT 'ativo',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS alunos (
 CREATE TABLE IF NOT EXISTS metricas_progresso (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
-    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL ON UPDATE CASCADE,
     semana_inicio DATE NOT NULL,
     oralidade INTEGER CHECK (oralidade >= 0 AND oralidade <= 4),
     compreensao INTEGER CHECK (compreensao >= 0 AND compreensao <= 4),
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS metricas_progresso (
 CREATE TABLE IF NOT EXISTS feedbacks_pedagogicos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
-    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL ON UPDATE CASCADE,
     semana_inicio DATE NOT NULL,
     conteudo TEXT NOT NULL,
     orientacao_familia TEXT,
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS feedbacks_pedagogicos (
 -- Tabela para avaliações de desempenho dos tutores (Admin -> Tutor)
 CREATE TABLE IF NOT EXISTS avaliacoes_tutores (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tutor_id UUID REFERENCES tutores(id) ON DELETE CASCADE,
+    tutor_id UUID REFERENCES tutores(id) ON DELETE CASCADE ON UPDATE CASCADE,
     desempenho_alunos INTEGER CHECK (desempenho_alunos >= 1 AND desempenho_alunos <= 5),
     feedback_pais INTEGER CHECK (feedback_pais >= 1 AND feedback_pais <= 5),
     observacoes TEXT,
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS loop_semanal_config (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
     turma_id UUID REFERENCES turmas(id) ON DELETE CASCADE,
-    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL ON UPDATE CASCADE,
     semana_inicio DATE NOT NULL,
     historia_desbloqueada BOOLEAN DEFAULT FALSE,
     jogo_desbloqueado BOOLEAN DEFAULT FALSE,
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS turmas (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     nome TEXT NOT NULL,
     nivel TEXT, -- Iniciante, Intermediário, etc
-    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL ON UPDATE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS loops_semanais (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     turma_id UUID REFERENCES turmas(id) ON DELETE CASCADE,
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
-    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL ON UPDATE CASCADE,
     semana_referencia DATE NOT NULL,
     semana_inicio DATE NOT NULL, -- Adicionado para consistência
     historia_id UUID REFERENCES biblioteca_recursos(id),
@@ -165,7 +165,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_loops_turma_semana ON loops_semanais (turm
 -- Tabela para as missões de casa culturais
 CREATE TABLE IF NOT EXISTS missoes_casa (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL ON UPDATE CASCADE,
     titulo TEXT NOT NULL,
     descricao TEXT NOT NULL,
     objetivo_pedagogico TEXT,
@@ -176,7 +176,7 @@ CREATE TABLE IF NOT EXISTS missoes_casa (
 CREATE TABLE IF NOT EXISTS reflexoes_familia (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
-    familia_id UUID REFERENCES pais(id) ON DELETE CASCADE,
+    familia_id UUID REFERENCES pais(id) ON DELETE CASCADE ON UPDATE CASCADE,
     semana_inicio DATE,
     engajamento INTEGER CHECK (engajamento >= 1 AND engajamento <= 5),
     comentario TEXT,
@@ -255,7 +255,7 @@ CREATE TABLE IF NOT EXISTS store_orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_name TEXT NOT NULL,
     customer_email TEXT NOT NULL,
-    parent_id UUID REFERENCES pais(id) ON DELETE SET NULL,
+    parent_id UUID REFERENCES pais(id) ON DELETE SET NULL ON UPDATE CASCADE,
     total_amount_cents INTEGER NOT NULL,
     status TEXT DEFAULT 'pendente', -- 'pendente', 'pago', 'cancelado', 'enviado', 'entregue'
     items JSONB NOT NULL, -- Lista de produtos no pedido
@@ -267,7 +267,7 @@ CREATE TABLE IF NOT EXISTS store_orders (
 -- Tabela de Assinaturas (Subscriptions)
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES pais(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES pais(id) ON DELETE CASCADE ON UPDATE CASCADE,
     stripe_customer_id TEXT,
     stripe_subscription_id TEXT,
     plan_type TEXT NOT NULL, -- 'mensal', 'semestral', 'anual'

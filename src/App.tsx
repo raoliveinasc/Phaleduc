@@ -2292,35 +2292,50 @@ const PasswordCreationView = ({
         const newAuthId = authData.user?.id;
         if (!newAuthId) throw new Error("Falha ao criar conta de autenticação.");
 
-        // 1.5 Buscar ID antigo para migrar alunos se necessário
+        // 1.5 Buscar ID antigo para migrar dados relacionados se necessário
         const { data: oldPai } = await supabase.from('pais').select('id').eq('email', email).maybeSingle();
         const oldId = oldPai?.id;
 
         // 2. Atualizar registro na tabela 'pais' com o novo ID do Auth
-        // Usamos upsert para garantir que o registro agora tenha o ID correto do Auth
-        const { error: updateError } = await supabase
-          .from('pais')
-          .upsert({ 
-            id: newAuthId,
-            email: email,
-            nome: userName,
-            senha: newPassword,
-            senha_temporaria: null 
-          }, { onConflict: 'email' });
-
-        if (updateError) throw updateError;
-
-        // 3. Migrar dados relacionados se o ID mudou
+        // Se já existia um registro com esse e-mail mas ID diferente, atualizamos o ID (PK)
+        // O ON UPDATE CASCADE no banco cuidará de atualizar as referências em outras tabelas
         if (oldId && oldId !== newAuthId) {
-          console.log("Migrando dados do ID antigo:", oldId, "para o novo:", newAuthId);
-          // Migrar Alunos
+          console.log("Migrando ID de", oldId, "para", newAuthId);
+          const { error: updateError } = await supabase
+            .from('pais')
+            .update({ 
+              id: newAuthId,
+              user_id: newAuthId,
+              nome: userName,
+              senha: newPassword,
+              senha_temporaria: null 
+            })
+            .eq('id', oldId);
+          
+          if (updateError) throw updateError;
+        } else {
+          // Se não existia ou o ID já era o mesmo, fazemos um upsert normal
+          const { error: upsertError } = await supabase
+            .from('pais')
+            .upsert({ 
+              id: newAuthId,
+              user_id: newAuthId,
+              email: email,
+              nome: userName,
+              senha: newPassword,
+              senha_temporaria: null 
+            }, { onConflict: 'email' });
+          
+          if (upsertError) throw upsertError;
+        }
+
+        // 3. Migrar dados relacionados manualmente apenas como garantia (opcional devido ao CASCADE)
+        if (oldId && oldId !== newAuthId) {
+          // Estes updates agora devem afetar 0 linhas se o CASCADE funcionou, o que é seguro
           await supabase.from('alunos').update({ parent_id: newAuthId }).eq('parent_id', oldId);
-          // Migrar Assinaturas
           await supabase.from('subscriptions').update({ user_id: newAuthId }).eq('user_id', oldId);
-          // Migrar Reflexões da Família
           await supabase.from('reflexoes_familia').update({ familia_id: newAuthId }).eq('familia_id', oldId);
-          // Migrar Pedidos da Loja (se houver)
-          await supabase.from('store_orders').update({ customer_email: email }).eq('customer_email', email); // E-mail é a chave aqui, mas podemos garantir o vínculo se necessário
+          await supabase.from('store_orders').update({ parent_id: newAuthId }).eq('parent_id', oldId);
         }
         
         // Se o ID mudou, precisamos notificar o pai para atualizar o estado
@@ -5074,18 +5089,37 @@ const TutoresPage = () => {
       const oldId = tutorData.id;
 
       // 2. Atualizar registro na tabela 'tutores' com o novo ID do Auth
-      const { error: updateError } = await supabase
-        .from('tutores')
-        .upsert({ 
-          id: newAuthId,
-          email: tutorData.email,
-          nome: tutorData.nome,
-          senha: newPassword,
-          senha_temporaria: null,
-          status: 'ativo'
-        }, { onConflict: 'email' });
-
-      if (updateError) throw updateError;
+      // Se o ID mudou, atualizamos o ID (PK) e o user_id
+      if (oldId && oldId !== newAuthId) {
+        console.log("Migrando ID do tutor de", oldId, "para", newAuthId);
+        const { error: updateError } = await supabase
+          .from('tutores')
+          .update({ 
+            id: newAuthId,
+            user_id: newAuthId,
+            nome: tutorData.nome,
+            senha: newPassword,
+            senha_temporaria: null,
+            status: 'ativo'
+          })
+          .eq('id', oldId);
+        
+        if (updateError) throw updateError;
+      } else {
+        const { error: upsertError } = await supabase
+          .from('tutores')
+          .upsert({ 
+            id: newAuthId,
+            user_id: newAuthId,
+            email: tutorData.email,
+            nome: tutorData.nome,
+            senha: newPassword,
+            senha_temporaria: null,
+            status: 'ativo'
+          }, { onConflict: 'email' });
+        
+        if (upsertError) throw upsertError;
+      }
 
       // 3. Migrar dados relacionados se o ID mudou
       if (oldId && oldId !== newAuthId) {

@@ -82,10 +82,12 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
           .single();
 
         if (existingParent) {
-          // Update existing parent with user_id
+          // Update existing parent with user_id and set id to authId if it's different
+          // This will trigger ON UPDATE CASCADE if the PK changes
           const { error: pError } = await supabase
             .from('pais')
             .update({
+              id: authId, // Set PK to Auth ID
               user_id: authId,
               nome: parentData.nome,
               telefone: parentData.telefone,
@@ -93,12 +95,13 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
             })
             .eq('id', existingParent.id);
           if (pError) throw pError;
-          parentId = existingParent.id;
+          parentId = authId;
         } else {
-          // Create new parent with user_id
+          // Create new parent with authId as PK
           const { data: newParent, error: pError } = await supabase
             .from('pais')
             .insert({
+              id: authId, // Use Auth ID as PK
               user_id: authId,
               nome: parentData.nome,
               email: parentData.email,
@@ -108,7 +111,7 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
             .select()
             .single();
           if (pError) throw pError;
-          parentId = newParent?.id;
+          parentId = authId;
         }
       } else {
         // If no session, we might need to create one or use a different ID strategy.
