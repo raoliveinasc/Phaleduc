@@ -72,18 +72,44 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
       let parentId: string;
 
       if (session) {
-        parentId = session.user.id;
-        // Upsert parent info
-        const { error: pError } = await supabase
+        const authId = session.user.id;
+        
+        // Try to find existing parent by email
+        const { data: existingParent } = await supabase
           .from('pais')
-          .upsert({
-            id: parentId,
-            nome: parentData.nome,
-            email: parentData.email,
-            telefone: parentData.telefone,
-            endereco: parentData.endereco
-          });
-        if (pError) throw pError;
+          .select('id')
+          .eq('email', parentData.email)
+          .single();
+
+        if (existingParent) {
+          // Update existing parent with user_id
+          const { error: pError } = await supabase
+            .from('pais')
+            .update({
+              user_id: authId,
+              nome: parentData.nome,
+              telefone: parentData.telefone,
+              endereco: parentData.endereco
+            })
+            .eq('id', existingParent.id);
+          if (pError) throw pError;
+          parentId = existingParent.id;
+        } else {
+          // Create new parent with user_id
+          const { data: newParent, error: pError } = await supabase
+            .from('pais')
+            .insert({
+              user_id: authId,
+              nome: parentData.nome,
+              email: parentData.email,
+              telefone: parentData.telefone,
+              endereco: parentData.endereco
+            })
+            .select()
+            .single();
+          if (pError) throw pError;
+          parentId = newParent?.id;
+        }
       } else {
         // If no session, we might need to create one or use a different ID strategy.
         // For now, let's try to insert and let Supabase handle the ID if it's not auth.uid()
@@ -135,8 +161,8 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
       <form onSubmit={step === 2 ? handleSubmit : (e) => { e.preventDefault(); setStep(2); }}>
         {step === 1 ? (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-            <h3 className="text-3xl font-black text-secondary tracking-tighter">Dados do Responsável</h3>
-            <p className="text-secondary/50 font-medium">Precisamos de algumas informações para contato.</p>
+            <h3 className="text-4xl font-black text-secondary tracking-tighter">Dados do Responsável</h3>
+            <p className="text-base text-secondary/50 font-medium">Precisamos de algumas informações para contato.</p>
             
             <div className="space-y-4">
               <div className="relative">
@@ -145,7 +171,7 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
                   type="text" 
                   placeholder="Nome Completo" 
                   required
-                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold transition-all"
+                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold text-base transition-all"
                   value={parentData.nome}
                   onChange={(e) => setParentData({...parentData, nome: e.target.value})}
                 />
@@ -156,7 +182,7 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
                   type="email" 
                   placeholder="E-mail" 
                   required
-                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold transition-all"
+                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold text-base transition-all"
                   value={parentData.email}
                   onChange={(e) => setParentData({...parentData, email: e.target.value})}
                 />
@@ -167,7 +193,7 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
                   type="tel" 
                   placeholder="Telefone" 
                   required
-                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold transition-all"
+                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold text-base transition-all"
                   value={parentData.telefone}
                   onChange={(e) => setParentData({...parentData, telefone: e.target.value})}
                 />
@@ -178,7 +204,7 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
                   type="text" 
                   placeholder="Endereço Completo" 
                   required
-                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold transition-all"
+                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold text-base transition-all"
                   value={parentData.endereco}
                   onChange={(e) => setParentData({...parentData, endereco: e.target.value})}
                 />
@@ -187,15 +213,15 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
 
             <button 
               type="submit"
-              className="w-full py-5 bg-secondary text-white rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-2"
+              className="w-full py-5 bg-secondary text-white rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-2"
             >
               Próximo Passo <ArrowRight className="w-5 h-5" />
             </button>
           </motion.div>
         ) : (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-            <h3 className="text-3xl font-black text-secondary tracking-tighter">Dados do Aluno</h3>
-            <p className="text-secondary/50 font-medium">Agora, conte-nos sobre quem vai aprender!</p>
+            <h3 className="text-4xl font-black text-secondary tracking-tighter">Dados do Aluno</h3>
+            <p className="text-base text-secondary/50 font-medium">Agora, conte-nos sobre quem vai aprender!</p>
 
             <div className="space-y-4">
               <div className="relative">
@@ -204,7 +230,7 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
                   type="text" 
                   placeholder="Nome do Aluno" 
                   required
-                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold transition-all"
+                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold text-base transition-all"
                   value={studentData.nome}
                   onChange={(e) => setStudentData({...studentData, nome: e.target.value})}
                 />
@@ -214,15 +240,15 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
                 <input 
                   type="date" 
                   required
-                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold transition-all"
+                  className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold text-base transition-all"
                   value={studentData.data_nascimento}
                   onChange={(e) => setStudentData({...studentData, data_nascimento: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Nível de Português</label>
+                <label className="text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Nível de Português</label>
                 <select 
-                  className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold transition-all"
+                  className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold text-base transition-all"
                   value={studentData.nivel}
                   onChange={(e) => setStudentData({...studentData, nivel: e.target.value})}
                 >
@@ -234,7 +260,7 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
               </div>
               <textarea 
                 placeholder="Observações ou necessidades especiais" 
-                className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold transition-all resize-none h-32"
+                className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white outline-none font-bold text-base transition-all resize-none h-32"
                 value={studentData.observacoes}
                 onChange={(e) => setStudentData({...studentData, observacoes: e.target.value})}
               />
@@ -244,14 +270,14 @@ export const StudentParentRegistration = ({ planName, onSuccess }: { planName: s
               <button 
                 type="button"
                 onClick={() => setStep(1)}
-                className="flex-1 py-5 bg-gray-100 text-secondary rounded-2xl font-black uppercase tracking-widest hover:bg-gray-200 transition-all"
+                className="flex-1 py-5 bg-gray-100 text-secondary rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-gray-200 transition-all"
               >
                 Voltar
               </button>
               <button 
                 type="submit"
                 disabled={loading}
-                className="flex-[2] py-5 bg-primary text-white rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                className="flex-[2] py-5 bg-primary text-white rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Finalizar Inscrição'}
               </button>
@@ -309,8 +335,8 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
         <div className="w-20 h-20 bg-secondary/10 rounded-3xl flex items-center justify-center text-secondary mx-auto mb-6">
           <GraduationCap className="w-10 h-10" />
         </div>
-        <h3 className="text-3xl font-black text-secondary tracking-tighter">Seja um Tutor Phaleduc</h3>
-        <p className="text-secondary/50 font-medium">Junte-se à nossa rede de educadores apaixonados.</p>
+        <h3 className="text-4xl font-black text-secondary tracking-tighter">Seja um Tutor Phaleduc</h3>
+        <p className="text-base text-secondary/50 font-medium">Junte-se à nossa rede de educadores apaixonados.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -321,7 +347,7 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
               type="text" 
               placeholder="Nome Completo" 
               required
-              className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold transition-all"
+              className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold text-base transition-all"
               value={formData.nome}
               onChange={(e) => setFormData({...formData, nome: e.target.value})}
             />
@@ -332,7 +358,7 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
               type="email" 
               placeholder="E-mail Profissional" 
               required
-              className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold transition-all"
+              className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold text-base transition-all"
               value={formData.email}
               onChange={(e) => setFormData({...formData, email: e.target.value})}
             />
@@ -343,15 +369,15 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
               type="tel" 
               placeholder="Telefone / WhatsApp" 
               required
-              className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold transition-all"
+              className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold text-base transition-all"
               value={formData.telefone}
               onChange={(e) => setFormData({...formData, telefone: e.target.value})}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Sua Especialidade Principal</label>
+            <label className="text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Sua Especialidade Principal</label>
             <select 
-              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold transition-all"
+              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold text-base transition-all"
               value={formData.especialidade}
               onChange={(e) => setFormData({...formData, especialidade: e.target.value})}
             >
@@ -365,7 +391,7 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
           <textarea 
             placeholder="Conte um pouco sobre sua experiência com educação e língua de herança..." 
             required
-            className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold transition-all resize-none h-40"
+            className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold text-base transition-all resize-none h-40"
             value={formData.bio}
             onChange={(e) => setFormData({...formData, bio: e.target.value})}
           />
@@ -376,7 +402,7 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
               placeholder="Crie uma Senha de Acesso" 
               required
               minLength={6}
-              className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold transition-all"
+              className="w-full pl-14 pr-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-secondary focus:bg-white outline-none font-bold text-base transition-all"
               value={formData.senha}
               onChange={(e) => setFormData({...formData, senha: e.target.value})}
             />
@@ -386,7 +412,7 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
         <button 
           type="submit"
           disabled={loading}
-          className="w-full py-5 bg-secondary text-white rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-2 disabled:opacity-50"
+          className="w-full py-5 bg-secondary text-white rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all shadow-xl shadow-secondary/20 flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Enviar Candidatura'}
         </button>

@@ -1,7 +1,7 @@
 -- Subscriptions table
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES pais(id) ON DELETE CASCADE,
     stripe_customer_id TEXT,
     stripe_subscription_id TEXT,
     plan_type TEXT NOT NULL, -- 'mensal', 'semestral', 'anual'

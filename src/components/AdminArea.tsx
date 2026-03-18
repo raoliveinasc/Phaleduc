@@ -1342,7 +1342,8 @@ export const AdminArea = () => {
                   { key: 'email', label: 'E-mail', type: 'email' },
                   { key: 'telefone', label: 'Telefone', type: 'tel' },
                   { key: 'endereco', label: 'Endereço', type: 'text' },
-                  { key: 'parent_pin', label: 'PIN de Segurança (4 dígitos)', type: 'text' }
+                  { key: 'parent_pin', label: 'PIN de Segurança (4 dígitos)', type: 'text' },
+                  { key: 'senha_temporaria', label: 'Senha Temporária (Admin)', type: 'text' }
                 ]}
                 extraActions={(pai, reload) => {
                   const handleInvite = async () => {
@@ -1408,6 +1409,7 @@ export const AdminArea = () => {
                   { key: 'status', label: 'Status', type: 'select', options: ['ativo', 'inativo'] },
                   { key: 'parent_id', label: 'Responsável', type: 'select', options: parents },
                   { key: 'tutor_id', label: 'Tutor', type: 'select', options: tutors },
+                  { key: 'senha_temporaria', label: 'Senha Temporária (Admin)', type: 'text' },
                   { key: 'observacoes', label: 'Observações', type: 'text' }
                 ]}
               />

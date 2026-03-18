@@ -130,7 +130,9 @@ export const AdminAssinaturas = () => {
 
   const filteredSubscriptions = subscriptions.filter(sub => 
     sub.stripe_customer_id?.toLowerCase().includes(search.toLowerCase()) ||
-    sub.plan_type.toLowerCase().includes(search.toLowerCase())
+    sub.plan_type.toLowerCase().includes(search.toLowerCase()) ||
+    sub.pais?.nome?.toLowerCase().includes(search.toLowerCase()) ||
+    sub.pais?.email?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (

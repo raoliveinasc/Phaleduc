@@ -44,6 +44,7 @@ export const AdminLoja = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
+  const [parents, setParents] = useState<{ value: string, label: string }[]>([]);
   const [stats, setStats] = useState({
     totalSales: 0,
     pendingOrders: 0,
@@ -87,19 +88,22 @@ export const AdminLoja = () => {
   async function fetchData() {
     setLoading(true);
     try {
-      const [productsRes, categoriesRes, ordersRes] = await Promise.all([
+      const [productsRes, categoriesRes, ordersRes, parentsRes] = await Promise.all([
         supabase.from('store_products').select('*, store_categories(name)').order('created_at', { ascending: false }),
         supabase.from('store_categories').select('*').order('name'),
-        supabase.from('store_orders').select('*').order('created_at', { ascending: false })
+        supabase.from('store_orders').select('*, pais(nome)').order('created_at', { ascending: false }),
+        supabase.from('pais').select('id, nome').order('nome')
       ]);
 
       if (productsRes.error) throw productsRes.error;
       if (categoriesRes.error) throw categoriesRes.error;
       if (ordersRes.error) throw ordersRes.error;
+      if (parentsRes.error) throw parentsRes.error;
 
       setProducts(productsRes.data || []);
       setCategories(categoriesRes.data || []);
       setOrders(ordersRes.data || []);
+      setParents(parentsRes.data?.map(p => ({ value: p.id, label: p.nome })) || []);
 
       // Calculate stats
       const totalSales = ordersRes.data?.filter(o => o.status === 'pago' || o.status === 'enviado' || o.status === 'entregue').reduce((acc, o) => acc + o.total_amount_cents, 0) || 0;
@@ -319,17 +323,18 @@ export const AdminLoja = () => {
   };
 
   const handleExportOrders = () => {
-    const headers = ['ID', 'Cliente', 'Email', 'Total', 'Status', 'Data'];
+    const headers = ['ID', 'Cliente', 'Email', 'Pai Vinculado', 'Total', 'Status', 'Data'];
     const csvContent = [
       headers.join(','),
       ...orders.map(o => [
         o.id,
         o.customer_name,
         o.customer_email,
+        o.pais?.nome || '-',
         (o.total_amount_cents / 100).toFixed(2),
         o.status,
         new Date(o.created_at).toLocaleDateString('pt-BR')
-      ].join(','))
+      ].map(v => `"${v}"`).join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -690,6 +695,9 @@ export const AdminLoja = () => {
                       <td className="px-8 py-6">
                         <p className="font-black text-secondary">{order.customer_name}</p>
                         <p className="text-[10px] text-secondary/40 font-bold">{order.customer_email}</p>
+                        {order.pais?.nome && (
+                          <p className="text-[10px] text-primary font-black mt-1 uppercase tracking-widest">Pai: {order.pais.nome}</p>
+                        )}
                       </td>
                       <td className="px-8 py-6">
                         <p className="text-secondary/60 font-bold">
@@ -1111,23 +1119,55 @@ export const AdminLoja = () => {
                 </div>
 
                 {/* Status Update */}
-                <div className="space-y-4">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary/40">Atualizar Status</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {['pendente', 'pago', 'enviado', 'entregue', 'cancelado'].map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => handleUpdateOrderStatus(selectedOrder.id, status)}
-                        className={cn(
-                          "px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2",
-                          selectedOrder.status === status 
-                            ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" 
-                            : "bg-gray-50 border-transparent text-secondary/40 hover:bg-gray-100"
-                        )}
-                      >
-                        {status}
-                      </button>
-                    ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary/40">Vincular ao Pai</h4>
+                    <select
+                      className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                      value={selectedOrder.parent_id || ''}
+                      onChange={async (e) => {
+                        const parentId = e.target.value || null;
+                        try {
+                          const { error } = await supabase
+                            .from('store_orders')
+                            .update({ parent_id: parentId })
+                            .eq('id', selectedOrder.id);
+                          
+                          if (error) throw error;
+                          
+                          setSelectedOrder({ ...selectedOrder, parent_id: parentId });
+                          setOrders(orders.map(o => o.id === selectedOrder.id ? { ...o, parent_id: parentId, pais: parents.find(p => p.value === parentId) ? { nome: parents.find(p => p.value === parentId)?.label } : null } : o));
+                          toast.success('Vínculo atualizado com sucesso!');
+                        } catch (err: any) {
+                          toast.error('Erro ao vincular: ' + err.message);
+                        }
+                      }}
+                    >
+                      <option value="">Nenhum Pai Selecionado</option>
+                      {parents.map(p => (
+                        <option key={p.value} value={p.value}>{p.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary/40">Atualizar Status</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['pendente', 'pago', 'enviado', 'entregue', 'cancelado'].map((status) => (
+                        <button
+                          key={status}
+                          onClick={() => handleUpdateOrderStatus(selectedOrder.id, status)}
+                          className={cn(
+                            "px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2",
+                            selectedOrder.status === status 
+                              ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" 
+                              : "bg-gray-50 border-transparent text-secondary/40 hover:bg-gray-100"
+                          )}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

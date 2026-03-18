@@ -4,6 +4,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Tabela de Pais (Famílias)
 CREATE TABLE IF NOT EXISTS pais (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id), -- Link to Supabase Auth
     nome TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     telefone TEXT,
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS pais (
 -- Tabela de Tutores (Educadores)
 CREATE TABLE IF NOT EXISTS tutores (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id), -- Link to Supabase Auth
     nome TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     telefone TEXT,
@@ -38,11 +40,13 @@ CREATE TABLE IF NOT EXISTS tutores (
 -- Tabela de Alunos
 CREATE TABLE IF NOT EXISTS alunos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id), -- Optional: if students have their own auth
     nome TEXT NOT NULL,
     data_nascimento DATE,
     nivel TEXT, -- Ex: Iniciante, Intermediário
     avatar TEXT,
     observacoes TEXT,
+    senha_temporaria TEXT,
     parent_id UUID REFERENCES pais(id) ON DELETE CASCADE,
     tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL,
     turma_id UUID REFERENCES turmas(id) ON DELETE SET NULL,
@@ -251,6 +255,7 @@ CREATE TABLE IF NOT EXISTS store_orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_name TEXT NOT NULL,
     customer_email TEXT NOT NULL,
+    parent_id UUID REFERENCES pais(id) ON DELETE SET NULL,
     total_amount_cents INTEGER NOT NULL,
     status TEXT DEFAULT 'pendente', -- 'pendente', 'pago', 'cancelado', 'enviado', 'entregue'
     items JSONB NOT NULL, -- Lista de produtos no pedido
@@ -259,15 +264,44 @@ CREATE TABLE IF NOT EXISTS store_orders (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Enable RLS on store tables
+-- Tabela de Assinaturas (Subscriptions)
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES pais(id) ON DELETE CASCADE,
+    stripe_customer_id TEXT,
+    stripe_subscription_id TEXT,
+    plan_type TEXT NOT NULL, -- 'mensal', 'semestral', 'anual'
+    status TEXT NOT NULL DEFAULT 'inactive', -- 'active', 'inactive', 'past_due', 'canceled'
+    current_period_start TIMESTAMP WITH TIME ZONE,
+    current_period_end TIMESTAMP WITH TIME ZONE,
+    cancel_at_period_end BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS on store and subscription tables
 ALTER TABLE store_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE store_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE store_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 
--- Basic Policies for store tables
+-- Basic Policies for store and subscription tables
 CREATE POLICY "Allow all for store_categories" ON store_categories FOR ALL USING (true);
 CREATE POLICY "Allow all for store_products" ON store_products FOR ALL USING (true);
 CREATE POLICY "Allow all for store_orders" ON store_orders FOR ALL USING (true);
+CREATE POLICY "Allow all for subscriptions" ON subscriptions FOR ALL USING (true);
+
+-- Índices para performance
+CREATE INDEX IF NOT EXISTS idx_alunos_parent_id ON alunos(parent_id);
+CREATE INDEX IF NOT EXISTS idx_alunos_tutor_id ON alunos(tutor_id);
+CREATE INDEX IF NOT EXISTS idx_alunos_turma_id ON alunos(turma_id);
+CREATE INDEX IF NOT EXISTS idx_metricas_aluno_id ON metricas_progresso(aluno_id);
+CREATE INDEX IF NOT EXISTS idx_feedbacks_aluno_id ON feedbacks_pedagogicos(aluno_id);
+CREATE INDEX IF NOT EXISTS idx_loops_aluno_id ON loops_semanais(aluno_id);
+CREATE INDEX IF NOT EXISTS idx_loops_turma_id ON loops_semanais(turma_id);
+CREATE INDEX IF NOT EXISTS idx_store_products_category_id ON store_products(category_id);
+CREATE INDEX IF NOT EXISTS idx_store_orders_parent_id ON store_orders(parent_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
 
 -- Inserir categorias iniciais seguindo a nomenclatura da Loja Virtual
 INSERT INTO store_categories (name, slug) VALUES 
@@ -276,7 +310,6 @@ INSERT INTO store_categories (name, slug) VALUES
 ('Educadores', 'educadores'),
 ('Biblioteca', 'biblioteca')
 ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name;
-ON CONFLICT (slug) DO NOTHING;
 
 -- Inserir alguns pedidos de exemplo para o dashboard
 INSERT INTO store_orders (customer_name, customer_email, total_amount_cents, status, items) VALUES

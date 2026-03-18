@@ -1342,12 +1342,20 @@ const LojaPage = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      // Try to find parent_id by email
+      const { data: parent } = await supabase
+        .from('pais')
+        .select('id')
+        .eq('email', customerInfo.email)
+        .single();
+
       const orderData = {
         customer_name: customerInfo.name,
         customer_email: customerInfo.email,
         shipping_address: customerInfo.address,
         total_amount_cents: cartTotal,
         status: 'pendente',
+        parent_id: parent?.id || null,
         items: cart.map(item => ({
           id: item.id,
           name: item.name,
@@ -2237,11 +2245,15 @@ interface ChildProfile {
 const PasswordCreationView = ({ 
   onSuccess, 
   userName, 
-  userId 
+  userId,
+  isTemp = false,
+  email = ""
 }: { 
-  onSuccess: () => void, 
+  onSuccess: (newUserId?: string) => void, 
   userName: string, 
-  userId: string 
+  userId: string,
+  isTemp?: boolean,
+  email?: string
 }) => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -2260,19 +2272,75 @@ const PasswordCreationView = ({
 
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from('pais')
-        .update({ 
-          senha: newPassword,
-          senha_temporaria: null 
-        })
-        .eq('id', userId);
+      if (isTemp && email) {
+        console.log("Processando primeiro acesso para:", email);
+        // 1. Criar conta no Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email,
+          password: newPassword,
+          options: { data: { full_name: userName } }
+        });
+        
+        if (authError) {
+          if (authError.message.includes("already registered")) {
+            alert("Este e-mail já está cadastrado. Por favor, use a opção de recuperar senha ou faça login normalmente.");
+            return;
+          }
+          throw authError;
+        }
+        
+        const newAuthId = authData.user?.id;
+        if (!newAuthId) throw new Error("Falha ao criar conta de autenticação.");
 
-      if (error) throw error;
-      onSuccess();
-    } catch (err) {
+        // 1.5 Buscar ID antigo para migrar alunos se necessário
+        const { data: oldPai } = await supabase.from('pais').select('id').eq('email', email).maybeSingle();
+        const oldId = oldPai?.id;
+
+        // 2. Atualizar registro na tabela 'pais' com o novo ID do Auth
+        // Usamos upsert para garantir que o registro agora tenha o ID correto do Auth
+        const { error: updateError } = await supabase
+          .from('pais')
+          .upsert({ 
+            id: newAuthId,
+            email: email,
+            nome: userName,
+            senha: newPassword,
+            senha_temporaria: null 
+          }, { onConflict: 'email' });
+
+        if (updateError) throw updateError;
+
+        // 3. Migrar dados relacionados se o ID mudou
+        if (oldId && oldId !== newAuthId) {
+          console.log("Migrando dados do ID antigo:", oldId, "para o novo:", newAuthId);
+          // Migrar Alunos
+          await supabase.from('alunos').update({ parent_id: newAuthId }).eq('parent_id', oldId);
+          // Migrar Assinaturas
+          await supabase.from('subscriptions').update({ user_id: newAuthId }).eq('user_id', oldId);
+          // Migrar Reflexões da Família
+          await supabase.from('reflexoes_familia').update({ familia_id: newAuthId }).eq('familia_id', oldId);
+          // Migrar Pedidos da Loja (se houver)
+          await supabase.from('store_orders').update({ customer_email: email }).eq('customer_email', email); // E-mail é a chave aqui, mas podemos garantir o vínculo se necessário
+        }
+        
+        // Se o ID mudou, precisamos notificar o pai para atualizar o estado
+        onSuccess(newAuthId);
+      } else {
+        // Caminho normal: apenas atualiza a senha (usuário já está logado no Auth ou apenas no DB)
+        const { error } = await supabase
+          .from('pais')
+          .update({ 
+            senha: newPassword,
+            senha_temporaria: null 
+          })
+          .eq('id', userId);
+
+        if (error) throw error;
+        onSuccess();
+      }
+    } catch (err: any) {
       console.error("Error saving password:", err);
-      alert("Erro ao salvar senha.");
+      alert("Erro ao salvar senha: " + (err.message || "Erro desconhecido"));
     } finally {
       setIsSaving(false);
     }
@@ -2288,28 +2356,28 @@ const PasswordCreationView = ({
         <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
           <Unlock className="w-10 h-10" />
         </div>
-        <h2 className="text-3xl font-black text-secondary text-center mb-2 tracking-tighter">Criar sua Senha</h2>
-        <p className="text-secondary/50 text-center mb-10 font-medium">Olá, {userName}! Para sua segurança, crie uma senha definitiva.</p>
+        <h2 className="text-4xl font-black text-secondary text-center mb-2 tracking-tighter">Criar sua Senha</h2>
+        <p className="text-base text-secondary/50 text-center mb-10 font-medium">Olá, {userName}! Para sua segurança, crie uma senha definitiva.</p>
         
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Nova Senha</label>
+            <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Nova Senha</label>
             <input 
               type="password" 
               required
               minLength={6}
-              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-secondary"
+              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-base text-secondary"
               placeholder="••••••••"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Confirmar Senha</label>
+            <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Confirmar Senha</label>
             <input 
               type="password" 
               required
-              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-secondary"
+              className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-base text-secondary"
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -2330,7 +2398,7 @@ const PasswordCreationView = ({
 
 const ChildRegistrationView = ({ 
   onSuccess, 
-  parentId 
+  parentId: initialParentId 
 }: { 
   onSuccess: () => void, 
   parentId: string 
@@ -2344,42 +2412,45 @@ const ChildRegistrationView = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (children.some(c => !c.name || !c.age)) {
-      alert("Preencha todos os campos das crianças.");
+      toast.error("Preencha todos os campos das crianças.");
       return;
     }
 
     setIsSaving(true);
     try {
+      // 1. Verificar ID do pai (priorizar Auth se disponível)
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const parentId = authUser?.id || initialParentId;
+
       if (!parentId) {
+        console.error("ChildRegistrationView: parentId is missing", { parentId, initialParentId });
         throw new Error("Sessão expirada ou usuário não identificado. Por favor, saia e entre novamente.");
       }
 
-      // 1. Garantir ABSOLUTAMENTE que o registro na tabela 'pais' existe antes de inserir o aluno
-      const { data: parentExists, error: checkError } = await supabase
-        .from('pais')
-        .select('id')
-        .eq('id', parentId)
-        .maybeSingle();
+      console.log("Iniciando cadastro de crianças para parentId:", parentId);
 
-      if (!parentExists) {
-        console.log("Registro de pai não encontrado ou invisível, tentando garantir existência...");
-        const { data: userData } = await supabase.auth.getUser();
-        const userFullName = userData.user?.user_metadata?.full_name || "Responsável";
-        const { error: createParentError } = await supabase
-          .from('pais')
-          .insert([{
-            id: parentId,
-            email: userData.user?.email || '',
-            nome: userFullName,
-            parent_pin: '0000'
-          }]);
-        
-        if (createParentError && !createParentError.message?.includes('409') && createParentError.code !== '23505') {
-          throw new Error("Não foi possível preparar seu perfil de responsável. Por favor, tente sair e entrar novamente.");
-        }
+      // 2. Garantir que o registro na tabela 'pais' existe (Upsert robusto)
+      const userFullName = authUser?.user_metadata?.full_name || "Responsável";
+      const userEmail = authUser?.email || '';
+
+      console.log("Garantindo existência do registro na tabela 'pais'...");
+      const { error: upsertError } = await supabase
+        .from('pais')
+        .upsert({
+          id: parentId,
+          email: userEmail,
+          nome: userFullName,
+          parent_pin: '0000' // PIN padrão se estiver criando agora
+        }, { onConflict: 'id' });
+
+      if (upsertError) {
+        console.warn("Aviso ao garantir registro de pai (pode ser RLS):", upsertError);
       }
 
-      // 2. Agora sim, inserir as crianças
+      // Pequena pausa para consistência eventual
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // 3. Inserir as crianças
       const childrenToInsert = children.map(c => ({
         parent_id: parentId,
         nome: c.name,
@@ -2388,15 +2459,29 @@ const ChildRegistrationView = ({
         status: 'ativo'
       }));
 
-      const { error } = await supabase
+      console.log("Inserindo crianças na tabela 'alunos':", childrenToInsert);
+      const { error: insertError } = await supabase
         .from('alunos')
         .insert(childrenToInsert);
 
-      if (error) throw error;
+      if (insertError) {
+        console.error("Erro ao inserir alunos:", insertError);
+        if (insertError.code === '23503') {
+          // Tentar uma última vez se for erro de FK (pode ser delay no upsert anterior)
+          console.log("Tentando novamente após erro de FK...");
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const { error: retryError } = await supabase.from('alunos').insert(childrenToInsert);
+          if (retryError) throw new Error("Erro de vínculo: O registro do responsável ainda não foi reconhecido pelo sistema. Por favor, tente novamente.");
+        } else {
+          throw insertError;
+        }
+      }
+
+      toast.success("Crianças cadastradas com sucesso!");
       onSuccess();
     } catch (err: any) {
-      console.error("Error registering children:", err);
-      alert("Erro ao cadastrar crianças: " + (err.message || "Erro desconhecido"));
+      console.error("Erro no cadastro de crianças:", err);
+      toast.error(err.message || "Erro ao cadastrar crianças. Verifique sua conexão.");
     } finally {
       setIsSaving(false);
     }
@@ -2412,8 +2497,8 @@ const ChildRegistrationView = ({
         <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
           <PlusCircle className="w-10 h-10" />
         </div>
-        <h2 className="text-3xl font-black text-secondary text-center mb-2 tracking-tighter">Cadastrar Crianças</h2>
-        <p className="text-secondary/50 text-center mb-10 font-medium">Adicione as crianças que farão parte da Phaleduc.</p>
+        <h2 className="text-4xl font-black text-secondary text-center mb-2 tracking-tighter">Cadastrar Crianças</h2>
+        <p className="text-base text-secondary/50 text-center mb-10 font-medium">Adicione as crianças que farão parte da Phaleduc.</p>
         
         <form onSubmit={handleSubmit} className="space-y-8">
           <div className="space-y-6">
@@ -2430,11 +2515,11 @@ const ChildRegistrationView = ({
                 )}
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Nome da Criança</label>
+                    <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Nome da Criança</label>
                     <input 
                       type="text" 
                       required
-                      className="w-full px-6 py-3 bg-white rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-secondary"
+                      className="w-full px-6 py-3 bg-white rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-base text-secondary"
                       placeholder="Nome completo"
                       value={child.name}
                       onChange={(e) => {
@@ -2445,13 +2530,13 @@ const ChildRegistrationView = ({
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Idade</label>
+                    <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Idade</label>
                     <input 
                       type="number" 
                       required
                       min="1"
                       max="18"
-                      className="w-full px-6 py-3 bg-white rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-secondary"
+                      className="w-full px-6 py-3 bg-white rounded-2xl border-2 border-transparent focus:border-primary focus:outline-none transition-all font-bold text-base text-secondary"
                       placeholder="Ex: 7"
                       value={child.age}
                       onChange={(e) => {
@@ -2538,22 +2623,22 @@ const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (
         {loginMode === 'parent' ? (
           <form onSubmit={(e) => { e.preventDefault(); onLogin({ email, password }); }} className="space-y-6">
             <div className="space-y-2">
-              <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">E-mail</label>
+              <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">E-mail</label>
               <input 
                 type="email" 
                 required
-                className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+                className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-base text-secondary"
                 placeholder="exemplo@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Senha</label>
+              <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Senha</label>
               <input 
                 type="password" 
                 required
-                className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+                className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-base text-secondary"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -2569,16 +2654,16 @@ const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (
         ) : (
           <form onSubmit={(e) => { e.preventDefault(); onStudentLogin(studentCode); }} className="space-y-6">
             <div className="space-y-2">
-              <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Código do Aluno</label>
+              <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Código do Aluno</label>
               <input 
                 type="text" 
                 required
-                className="w-full px-6 py-6 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-black text-secondary text-center text-3xl tracking-[0.5em]"
+                className="w-full px-6 py-6 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-black text-secondary text-center text-4xl tracking-[0.5em]"
                 placeholder="000000"
                 value={studentCode}
                 onChange={(e) => setStudentCode(e.target.value)}
               />
-              <p className="text-[10px] text-secondary/30 font-bold text-center mt-2">Peça seu código para seu pai ou mãe.</p>
+              <p className="text-xs text-secondary/30 font-bold text-center mt-2">Peça seu código para seu pai ou mãe.</p>
             </div>
             <button 
               type="submit"
@@ -2638,27 +2723,27 @@ const RegisterView = ({ onRegister, onSwitchToLogin }: { onRegister: (data: any)
         <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-8">
           <UserPlus className="w-10 h-10" />
         </div>
-        <h2 className="text-3xl font-black text-secondary text-center mb-2 tracking-tighter">Criar Conta Familiar</h2>
-        <p className="text-secondary/50 text-center mb-10 font-medium">Comece sua jornada bilingue hoje mesmo.</p>
+        <h2 className="text-4xl font-black text-secondary text-center mb-2 tracking-tighter">Criar Conta Familiar</h2>
+        <p className="text-base text-secondary/50 text-center mb-10 font-medium">Comece sua jornada bilingue hoje mesmo.</p>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
-            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Seu Nome Completo</label>
+            <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Seu Nome Completo</label>
             <input 
               type="text" 
               required
-              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-base text-secondary"
               placeholder="Ex: João Silva"
               value={formData.nome}
               onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
             />
           </div>
           <div className="space-y-1">
-            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">E-mail</label>
+            <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">E-mail</label>
             <input 
               type="email" 
               required
-              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-base text-secondary"
               placeholder="exemplo@email.com"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -2666,22 +2751,22 @@ const RegisterView = ({ onRegister, onSwitchToLogin }: { onRegister: (data: any)
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Senha</label>
+              <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Senha</label>
               <input 
                 type="password" 
                 required
-                className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+                className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-base text-secondary"
                 placeholder="••••••••"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               />
             </div>
             <div className="space-y-1">
-              <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">Confirmar</label>
+              <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Confirmar</label>
               <input 
                 type="password" 
                 required
-                className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-secondary"
+                className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-bold text-base text-secondary"
                 placeholder="••••••••"
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
@@ -2689,17 +2774,17 @@ const RegisterView = ({ onRegister, onSwitchToLogin }: { onRegister: (data: any)
             </div>
           </div>
           <div className="space-y-1">
-            <label className="block text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-4">PIN de Segurança (4 dígitos)</label>
+            <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">PIN de Segurança (4 dígitos)</label>
             <input 
               type="password" 
               maxLength={4}
               required
-              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-black text-secondary text-center tracking-[1em]"
+              className="w-full px-6 py-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-black text-secondary text-center text-base tracking-[1em]"
               placeholder="••••"
               value={formData.parentPin}
               onChange={(e) => setFormData({ ...formData, parentPin: e.target.value })}
             />
-            <p className="text-[9px] text-secondary/30 font-bold ml-4">Este PIN será usado para acessar o Modo Família.</p>
+            <p className="text-xs text-secondary/30 font-bold ml-4">Este PIN será usado para acessar o Modo Família.</p>
           </div>
           <button 
             type="submit"
@@ -3045,30 +3130,26 @@ const AlunosPaisPage = () => {
       if (fError) console.error("Erro ao buscar dados da família:", fError);
 
       if (!family) {
-        console.log("Registro de responsável não visível ou inexistente. Tentando garantir existência...");
+        console.log("Registro de responsável não encontrado. Tentando garantir existência via upsert...");
         const { data: userData } = await supabase.auth.getUser();
         const userFullName = userData.user?.user_metadata?.full_name || "Responsável";
+        const userEmail = userData.user?.email || '';
+        
         const { data: newFamily, error: insertError } = await supabase
           .from('pais')
-          .insert([{
+          .upsert({
             id: userId,
-            email: userData.user?.email || '',
+            email: userEmail,
             nome: userFullName,
             parent_pin: '0000'
-          }])
+          }, { onConflict: 'id' })
           .select()
           .maybeSingle();
         
         if (insertError) {
-          // Se o erro for 409, o registro já existe, podemos ignorar o erro de inserção
-          if (insertError.code === '23505' || insertError.message?.includes('409')) {
-            console.log("Registro de responsável já existe (conflito 409 ignorado).");
-            // Tentar buscar novamente, se falhar, assumimos que existe mas RLS bloqueia leitura
-            const { data: retryFamily } = await supabase.from('pais').select('*').eq('id', userId).maybeSingle();
-            family = retryFamily || { id: userId, nome: userFullName };
-          } else {
-            console.error("Erro ao criar registro de responsável:", insertError);
-          }
+          console.error("Erro ao garantir registro de responsável:", insertError);
+          // Fallback local se o RLS bloquear leitura mas permitir escrita
+          family = { id: userId, nome: userFullName, email: userEmail };
         } else if (newFamily) {
           family = newFamily;
         }
@@ -3084,7 +3165,6 @@ const AlunosPaisPage = () => {
       
       if (pError) {
         console.error("Erro ao buscar perfis de alunos:", pError);
-        alert("Erro ao carregar perfis de alunos: " + pError.message);
       }
       
       const currentProfiles = childProfiles || [];
@@ -3099,6 +3179,10 @@ const AlunosPaisPage = () => {
         console.log("Redirecionando para onboarding: senha temporária");
         setView('onboarding');
         setOnboardingStep('password');
+      } else if (!family?.parent_pin || family.parent_pin === '0000') {
+        console.log("Redirecionando para onboarding: PIN não definido");
+        setView('onboarding');
+        setOnboardingStep('pin');
       } else if (currentProfiles.length === 0) {
         console.log("Redirecionando para onboarding: sem crianças");
         setView('onboarding');
@@ -3404,41 +3488,54 @@ const AlunosPaisPage = () => {
   const handleLogin = async (data: any) => {
     setLoading(true);
     
-    // Tentar login customizado primeiro (para suporte a senha temporária e senha na tabela pais)
-    const { data: family, error: fError } = await supabase
-      .from('pais')
-      .select('*')
-      .eq('email', data.email)
-      .single();
+    try {
+      // 1. Tentar login via Supabase Auth primeiro (Caminho padrão)
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
 
-    if (family) {
-      const isValidPassword = (family.senha && family.senha === data.password) || 
-                              (family.senha_temporaria && family.senha_temporaria === data.password);
-      
-      if (isValidPassword) {
-        setUser({ id: family.id, email: family.email });
-        await syncDataAndNavigate(family.id);
+      if (!authError && authData.user) {
+        console.log("Login via Auth bem-sucedido");
+        setUser(authData.user);
+        await syncDataAndNavigate(authData.user.id);
         return;
       }
-    }
 
-    // Fallback para login padrão do Supabase Auth
-    const { data: authData, error } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password: data.password,
-    });
+      // 2. Se falhar, verificar se é um "Primeiro Acesso" com senha temporária na tabela 'pais'
+      console.log("Verificando senha temporária na tabela 'pais'...");
+      const { data: family } = await supabase
+        .from('pais')
+        .select('*')
+        .eq('email', data.email)
+        .maybeSingle();
 
-    if (error) {
-      alert("E-mail ou senha incorretos. Se este é seu primeiro acesso, use a senha temporária enviada pelo administrador.");
+      if (family && (family.senha_temporaria === data.password || family.senha === data.password)) {
+        console.log("Senha válida encontrada na tabela 'pais'");
+        // Usuário existe na tabela 'pais' mas talvez não no Auth ou com senha diferente
+        // Simulamos um estado de "pré-login" para forçar a criação/sincronização de senha
+        setUser({ 
+          id: family.id, 
+          email: family.email, 
+          isTemp: true,
+          nome: family.nome 
+        });
+        setFamilyData(family);
+        
+        // Sempre forçar troca de senha se logou via DB e não via Auth
+        setView('onboarding');
+        setOnboardingStep('password');
+        return;
+      }
+
+      // 3. Se tudo falhar
+      toast.error("E-mail ou senha incorretos. Se este é seu primeiro acesso, use a senha temporária enviada pelo administrador.");
+    } catch (err) {
+      console.error("Erro no processo de login:", err);
+      toast.error("Ocorreu um erro ao tentar fazer login.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (authData.user) {
-      setUser(authData.user);
-      await syncDataAndNavigate(authData.user.id);
-    }
-    setLoading(false);
   };
 
   const handleStudentQuickLogin = async (code: string) => {
@@ -3661,8 +3758,18 @@ const AlunosPaisPage = () => {
               {onboardingStep === 'password' && (
                 <PasswordCreationView 
                   userId={user?.id} 
-                  userName={familyData?.nome || "Responsável"} 
-                  onSuccess={() => setOnboardingStep('pin')} 
+                  userName={user?.nome || familyData?.nome || "Responsável"} 
+                  email={user?.email || familyData?.email}
+                  isTemp={user?.isTemp}
+                  onSuccess={async (newUserId?: string) => {
+                    if (newUserId) {
+                      // Se o ID mudou (após signUp), atualizamos o estado local
+                      setUser({ ...user, id: newUserId, isTemp: false });
+                      await syncDataAndNavigate(newUserId);
+                    } else {
+                      setOnboardingStep('pin');
+                    }
+                  }} 
                 />
               )}
 
@@ -4737,19 +4844,33 @@ const TutoresPage = () => {
 
   const fetchTutorStudents = async () => {
     try {
-      const { data, error } = await supabase
-        .from('alunos')
-        .select('*, pais(*), turmas(nome)')
-        .eq('tutor_id', tutorData.id);
-      
-      if (data) setTutorStudents(data);
-
+      // 1. Buscar turmas do tutor
       const { data: turmasData } = await supabase
         .from('turmas')
         .select('*')
         .eq('tutor_id', tutorData.id);
       
       if (turmasData) setTurmas(turmasData);
+
+      // 2. Buscar alunos: 
+      // - Atribuídos diretamente ao tutor (tutor_id)
+      // - OU que pertençam a uma das turmas do tutor
+      const turmaIds = turmasData?.map(t => t.id) || [];
+      
+      let query = supabase
+        .from('alunos')
+        .select('*, pais(*), turmas(nome, tutor_id)');
+
+      if (turmaIds.length > 0) {
+        query = query.or(`tutor_id.eq.${tutorData.id},turma_id.in.(${turmaIds.join(',')})`);
+      } else {
+        query = query.eq('tutor_id', tutorData.id);
+      }
+
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      if (data) setTutorStudents(data);
 
       await fetchLibrary();
     } catch (err) {
@@ -4932,26 +5053,72 @@ const TutoresPage = () => {
 
     setIsSavingPassword(true);
     try {
-      const { error } = await supabase
+      // 1. Criar conta no Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: tutorData.email,
+        password: newPassword,
+        options: { data: { full_name: tutorData.nome, role: 'tutor' } }
+      });
+
+      if (authError) {
+        if (authError.message.includes("already registered")) {
+          alert("Este e-mail já está cadastrado no sistema de autenticação. Por favor, use a opção de recuperar senha.");
+          return;
+        }
+        throw authError;
+      }
+
+      const newAuthId = authData.user?.id;
+      if (!newAuthId) throw new Error("Falha ao criar conta de autenticação.");
+
+      const oldId = tutorData.id;
+
+      // 2. Atualizar registro na tabela 'tutores' com o novo ID do Auth
+      const { error: updateError } = await supabase
         .from('tutores')
-        .update({ 
+        .upsert({ 
+          id: newAuthId,
+          email: tutorData.email,
+          nome: tutorData.nome,
           senha: newPassword,
-          senha_temporaria: null // Clear temporary password
-        })
-        .eq('id', tutorData.id);
+          senha_temporaria: null,
+          status: 'ativo'
+        }, { onConflict: 'email' });
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
-      alert(mustCreatePassword ? 'Senha criada com sucesso! Agora você pode acessar o portal.' : 'Senha atualizada com sucesso!');
+      // 3. Migrar dados relacionados se o ID mudou
+      if (oldId && oldId !== newAuthId) {
+        console.log("Migrando dados do tutor do ID antigo:", oldId, "para o novo:", newAuthId);
+        
+        // Migrar Alunos
+        await supabase.from('alunos').update({ tutor_id: newAuthId }).eq('tutor_id', oldId);
+        // Migrar Turmas
+        await supabase.from('turmas').update({ tutor_id: newAuthId }).eq('tutor_id', oldId);
+        // Migrar Métricas de Progresso
+        await supabase.from('metricas_progresso').update({ tutor_id: newAuthId }).eq('tutor_id', oldId);
+        // Migrar Feedbacks Pedagógicos
+        await supabase.from('feedbacks_pedagogicos').update({ tutor_id: newAuthId }).eq('tutor_id', oldId);
+        // Migrar Avaliações de Tutores
+        await supabase.from('avaliacoes_tutores').update({ tutor_id: newAuthId }).eq('tutor_id', oldId);
+        // Migrar Configurações de Loop
+        await supabase.from('loop_semanal_config').update({ tutor_id: newAuthId }).eq('tutor_id', oldId);
+        // Migrar Loops Semanais
+        await supabase.from('loops_semanais').update({ tutor_id: newAuthId }).eq('tutor_id', oldId);
+        // Migrar Missões de Casa
+        await supabase.from('missoes_casa').update({ tutor_id: newAuthId }).eq('tutor_id', oldId);
+      }
+
+      // Atualizar estado local
+      setTutorData(prev => ({ ...prev, id: newAuthId, senha: newPassword, senha_temporaria: null }));
       setMustCreatePassword(false);
       setShowPasswordChange(false);
       setNewPassword('');
       setConfirmPassword('');
-      // Update local data
-      setTutorData({ ...tutorData, senha: newPassword, senha_temporaria: null });
-    } catch (err) {
+      alert('Senha criada com sucesso! Sua conta está agora vinculada ao sistema de segurança.');
+    } catch (err: any) {
       console.error('Error saving password:', err);
-      alert('Erro ao salvar nova senha. Tente novamente.');
+      alert('Erro ao salvar senha: ' + (err.message || 'Erro desconhecido'));
     } finally {
       setIsSavingPassword(false);
     }
@@ -5175,41 +5342,50 @@ const TutoresPage = () => {
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-2">Contexto de Atribuição</span>
-                    <select 
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val.startsWith('turma:')) {
-                          const t = turmas.find(t => t.id === val.replace('turma:', ''));
-                          setSelectedTurma(t || null);
-                          setSelectedStudent(null);
-                        } else if (val.startsWith('aluno:')) {
-                          const s = tutorStudents.find(s => s.id === val.replace('aluno:', ''));
-                          setSelectedStudent(s || null);
-                          setSelectedTurma(null);
-                        } else {
-                          setSelectedTurma(null);
-                          setSelectedStudent(null);
-                        }
-                      }}
-                      className="px-6 py-3 bg-gray-50 rounded-2xl border-none font-black text-[10px] uppercase tracking-widest text-secondary focus:ring-2 focus:ring-primary/20 transition-all min-w-[240px]"
-                      value={selectedTurma ? `turma:${selectedTurma.id}` : selectedStudent ? `aluno:${selectedStudent.id}` : ''}
-                    >
-                      <option value="">Selecione Turma ou Aluno</option>
-                      {turmas.length > 0 && (
-                        <optgroup label="Turmas">
-                          {turmas.map(t => (
-                            <option key={t.id} value={`turma:${t.id}`}>Turma: {t.nome}</option>
-                          ))}
-                        </optgroup>
+                    <div className="relative">
+                      <select 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val.startsWith('turma:')) {
+                            const t = turmas.find(t => t.id === val.replace('turma:', ''));
+                            setSelectedTurma(t || null);
+                            setSelectedStudent(null);
+                          } else if (val.startsWith('aluno:')) {
+                            const s = tutorStudents.find(s => s.id === val.replace('aluno:', ''));
+                            setSelectedStudent(s || null);
+                            setSelectedTurma(null);
+                          } else {
+                            setSelectedTurma(null);
+                            setSelectedStudent(null);
+                          }
+                        }}
+                        className="px-6 py-3 bg-gray-50 rounded-2xl border-none font-black text-[10px] uppercase tracking-widest text-secondary focus:ring-2 focus:ring-primary/20 transition-all min-w-[240px]"
+                        value={selectedTurma ? `turma:${selectedTurma.id}` : selectedStudent ? `aluno:${selectedStudent.id}` : ''}
+                      >
+                        <option value="">Selecione Turma ou Aluno</option>
+                        {turmas.length > 0 && (
+                          <optgroup label="Turmas">
+                            {turmas.map(t => (
+                              <option key={t.id} value={`turma:${t.id}`}>Turma: {t.nome}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {tutorStudents.length > 0 && (
+                          <optgroup label="Alunos Individuais">
+                            {tutorStudents.map(s => (
+                              <option key={s.id} value={`aluno:${s.id}`}>Aluno: {s.nome}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                      {selectedStudent && (
+                        <div className="absolute -top-1 -right-1 flex gap-1">
+                          {selectedStudent.turma_id && (
+                            <div className="w-3 h-3 bg-primary rounded-full border-2 border-white" title="Pertence a uma turma" />
+                          )}
+                        </div>
                       )}
-                      {tutorStudents.length > 0 && (
-                        <optgroup label="Alunos Individuais">
-                          {tutorStudents.map(s => (
-                            <option key={s.id} value={`aluno:${s.id}`}>Aluno: {s.nome}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-3 px-4 py-2 bg-primary/5 rounded-2xl border border-primary/10 mt-4 md:mt-0">
@@ -5507,7 +5683,12 @@ const TutoresPage = () => {
                         {student.avatar || '👶'}
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-black text-secondary">{student.nome}</h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-black text-secondary">{student.nome}</h4>
+                          {student.turma_id && (
+                            <div className="w-2 h-2 bg-primary rounded-full" title="Aluno de Turma" />
+                          )}
+                        </div>
                         <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">{student.nivel}</p>
                       </div>
                       <ChevronRight className={cn("w-5 h-5 transition-all", selectedStudent?.id === student.id ? "text-primary translate-x-1" : "text-gray-200")} />
