@@ -3145,28 +3145,56 @@ const AlunosPaisPage = () => {
       if (fError) console.error("Erro ao buscar dados da família:", fError);
 
       if (!family) {
-        console.log("Registro de responsável não encontrado. Tentando garantir existência via upsert...");
+        console.log("Registro de responsável não encontrado por ID. Verificando por e-mail...");
         const { data: userData } = await supabase.auth.getUser();
         const userFullName = userData.user?.user_metadata?.full_name || "Responsável";
         const userEmail = userData.user?.email || '';
         
-        const { data: newFamily, error: insertError } = await supabase
+        // Tentar encontrar por e-mail para migrar o ID se necessário
+        const { data: existingByEmail } = await supabase
           .from('pais')
-          .upsert({
-            id: userId,
-            email: userEmail,
-            nome: userFullName,
-            parent_pin: '0000'
-          }, { onConflict: 'id' })
-          .select()
+          .select('*')
+          .eq('email', userEmail)
           .maybeSingle();
-        
-        if (insertError) {
-          console.error("Erro ao garantir registro de responsável:", insertError);
-          // Fallback local se o RLS bloquear leitura mas permitir escrita
-          family = { id: userId, nome: userFullName, email: userEmail };
-        } else if (newFamily) {
-          family = newFamily;
+
+        if (existingByEmail) {
+          console.log("Registro encontrado por e-mail. Migrando ID de", existingByEmail.id, "para", userId);
+          const { data: updatedFamily, error: updateError } = await supabase
+            .from('pais')
+            .update({
+              id: userId,
+              user_id: userId,
+              nome: existingByEmail.nome || userFullName
+            })
+            .eq('id', existingByEmail.id)
+            .select()
+            .maybeSingle();
+          
+          if (updateError) {
+            console.error("Erro ao migrar ID do responsável:", updateError);
+            family = existingByEmail; // Fallback para o registro antigo se falhar o update (improvável)
+          } else {
+            family = updatedFamily;
+          }
+        } else {
+          console.log("Nenhum registro encontrado por e-mail. Criando novo...");
+          const { data: newFamily, error: insertError } = await supabase
+            .from('pais')
+            .upsert({
+              id: userId,
+              email: userEmail,
+              nome: userFullName,
+              parent_pin: '0000'
+            }, { onConflict: 'id' })
+            .select()
+            .maybeSingle();
+          
+          if (insertError) {
+            console.error("Erro ao garantir registro de responsável:", insertError);
+            family = { id: userId, nome: userFullName, email: userEmail };
+          } else if (newFamily) {
+            family = newFamily;
+          }
         }
       }
 
@@ -3777,13 +3805,12 @@ const AlunosPaisPage = () => {
                   email={user?.email || familyData?.email}
                   isTemp={user?.isTemp}
                   onSuccess={async (newUserId?: string) => {
+                    const finalUserId = newUserId || user?.id;
                     if (newUserId) {
                       // Se o ID mudou (após signUp), atualizamos o estado local
                       setUser({ ...user, id: newUserId, isTemp: false });
-                      await syncDataAndNavigate(newUserId);
-                    } else {
-                      setOnboardingStep('pin');
                     }
+                    if (finalUserId) await syncDataAndNavigate(finalUserId);
                   }} 
                 />
               )}
@@ -3801,9 +3828,12 @@ const AlunosPaisPage = () => {
                     if (pin.length !== 4) return alert("O PIN deve ter 4 dígitos.");
                     setLoading(true);
                     const { error } = await supabase.from('pais').update({ parent_pin: pin }).eq('id', user.id);
-                    setLoading(false);
-                    if (error) alert("Erro ao salvar PIN.");
-                    else setOnboardingStep('children');
+                    if (error) {
+                      alert("Erro ao salvar PIN.");
+                      setLoading(false);
+                    } else {
+                      await syncDataAndNavigate(user.id);
+                    }
                   }} className="space-y-8">
                     <input 
                       name="pin"
