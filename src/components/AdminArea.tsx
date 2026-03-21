@@ -1195,7 +1195,9 @@ const ManageBiblioteca = () => {
 };
 
 export const AdminArea = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isChecking, setIsChecking] = useState<boolean>(true);
+  const [adminPassword, setAdminPassword] = useState('');
   const [configError, setConfigError] = useState<string | null>(null);
   const [parents, setParents] = useState<{ value: string, label: string }[]>([]);
   const [tutors, setTutors] = useState<{ value: string, label: string }[]>([]);
@@ -1212,7 +1214,11 @@ export const AdminArea = () => {
           throw new Error('Credenciais do Supabase não encontradas. Verifique as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
         }
         
-        setIsAuthenticated(true);
+        // Check if already authenticated in this session
+        const savedAuth = sessionStorage.getItem('phaleduc_admin_auth');
+        if (savedAuth === 'true') {
+          setIsAuthenticated(true);
+        }
 
         // Fetch parents, tutors and turmas for the Alunos form
         const [paisRes, tutoresRes, turmasRes] = await Promise.all([
@@ -1233,11 +1239,23 @@ export const AdminArea = () => {
       } catch (err: any) {
         console.error('AdminArea config error:', err);
         setConfigError(err.message);
-        setIsAuthenticated(false);
+      } finally {
+        setIsChecking(false);
       }
     }
     init();
   }, []);
+
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminPassword === 'adminPhaleduc2024') {
+      setIsAuthenticated(true);
+      sessionStorage.setItem('phaleduc_admin_auth', 'true');
+      toast.success('Acesso autorizado!');
+    } else {
+      toast.error('Senha administrativa incorreta');
+    }
+  };
 
   if (configError) {
     return (
@@ -1282,11 +1300,59 @@ export const AdminArea = () => {
     );
   }
 
-  if (isAuthenticated === null) return (
+  if (isChecking) return (
     <div className="h-screen flex items-center justify-center bg-gray-50">
       <Loader2 className="w-12 h-12 text-primary animate-spin" />
     </div>
   );
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-secondary flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white w-full max-w-md rounded-[40px] shadow-2xl p-12 space-y-8"
+        >
+          <div className="text-center space-y-2">
+            <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto mb-6">
+              <ShieldCheck className="w-10 h-10" />
+            </div>
+            <h2 className="text-3xl font-black text-secondary uppercase tracking-tighter">Área Restrita</h2>
+            <p className="text-secondary/40 font-medium">Acesso exclusivo para administradores Phaleduc.</p>
+          </div>
+
+          <form onSubmit={handleAdminLogin} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Senha de Acesso</label>
+              <div className="relative">
+                <Lock className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-secondary/20" />
+                <input 
+                  type="password" 
+                  required
+                  className="w-full pl-14 pr-6 py-5 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                  placeholder="••••••••"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <button 
+              type="submit"
+              className="w-full bg-primary text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-primary/20"
+            >
+              Entrar no Painel
+            </button>
+          </form>
+
+          <Link to="/" className="block text-center text-xs font-black uppercase tracking-widest text-secondary/20 hover:text-primary transition-colors">
+            Voltar ao Site
+          </Link>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">

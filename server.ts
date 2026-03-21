@@ -192,7 +192,53 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
+  // API route to send shipping confirmation email
+app.post('/api/send-shipping-email', async (req, res) => {
+  const { orderId, trackingNumber, customerEmail, customerName } = req.body;
+
+  if (!customerEmail) {
+    return res.status(400).json({ error: 'Customer email is required' });
+  }
+
+  const mailOptions = {
+    from: `"${process.env.SMTP_FROM_NAME || 'Phaleduc Store'}" <${process.env.SMTP_FROM_EMAIL}>`,
+    to: customerEmail,
+    subject: `Seu pedido #${orderId.slice(0, 8)} foi enviado!`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h2 style="color: #FF6321; text-align: center;">Pedido Enviado!</h2>
+        <p>Olá, <strong>${customerName}</strong>,</p>
+        <p>Temos ótimas notícias! Seu pedido <strong>#${orderId.slice(0, 8)}</strong> foi processado e já está a caminho.</p>
+        
+        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 10px; margin: 20px 0; text-align: center;">
+          <p style="margin: 0; font-size: 14px; color: #666;">Código de Rastreamento:</p>
+          <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold; color: #141414; letter-spacing: 2px;">${trackingNumber}</p>
+        </div>
+
+        <p>Você pode acompanhar o status da entrega utilizando o código acima no site da transportadora.</p>
+        
+        <p style="margin-top: 30px;">Se tiver qualquer dúvida, responda a este e-mail ou entre em contato com nosso suporte.</p>
+        
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
+        
+        <p style="font-size: 12px; color: #999; text-align: center;">
+          Phaleduc - Educação e Tecnologia<br>
+          Este é um e-mail automático, por favor não responda diretamente.
+        </p>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error sending shipping email:', error);
+    res.status(500).json({ error: 'Failed to send shipping email' });
+  }
+});
+
+// Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

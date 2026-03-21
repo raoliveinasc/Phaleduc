@@ -305,21 +305,47 @@ export const AdminLoja = () => {
     }
   };
 
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string, trackingNumber?: string) => {
     try {
+      const updateData: any = { status: newStatus };
+      if (trackingNumber !== undefined) {
+        updateData.tracking_number = trackingNumber;
+      }
+
       const { error } = await supabase
         .from('store_orders')
-        .update({ status: newStatus })
+        .update(updateData)
         .eq('id', orderId);
       if (error) throw error;
-      toast.success(`Status atualizado para ${newStatus}`);
+      
+      toast.success(`Pedido atualizado com sucesso!`);
+      
+      // If status is 'enviado' and tracking number is provided, we could trigger another email
+      if (newStatus === 'enviado' && trackingNumber) {
+        try {
+          await fetch('/api/send-shipping-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderId,
+              trackingNumber,
+              customerEmail: selectedOrder?.customer_email,
+              customerName: selectedOrder?.customer_name
+            })
+          });
+          toast.success('E-mail de rastreamento enviado!');
+        } catch (emailErr) {
+          console.error('Error sending shipping email:', emailErr);
+        }
+      }
+
       fetchData();
       if (selectedOrder && selectedOrder.id === orderId) {
-        setSelectedOrder({ ...selectedOrder, status: newStatus });
+        setSelectedOrder({ ...selectedOrder, ...updateData });
       }
     } catch (err) {
       console.error('Error updating order status:', err);
-      toast.error('Erro ao atualizar status do pedido');
+      toast.error('Erro ao atualizar pedido');
     }
   };
 
@@ -1244,6 +1270,76 @@ export const AdminLoja = () => {
                           {status}
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Tracking Number */}
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary/40">Código de Rastreamento</h4>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        placeholder="Ex: BR123456789"
+                        className="flex-1 px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                        defaultValue={selectedOrder.tracking_number || ''}
+                        onBlur={(e) => {
+                          if (e.target.value !== selectedOrder.tracking_number) {
+                            handleUpdateOrderStatus(selectedOrder.id, selectedOrder.status, e.target.value);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Email Status */}
+                  <div className="md:col-span-2 space-y-4">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary/40">Status de Notificações</h4>
+                    <div className="p-6 bg-gray-50 rounded-3xl border border-gray-100 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center",
+                          selectedOrder.confirmation_email_sent ? "bg-success/10 text-success" : "bg-amber-500/10 text-amber-500"
+                        )}>
+                          <Mail className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-black text-secondary text-sm">E-mail de Confirmação</p>
+                          <p className="text-[10px] text-secondary/40 font-bold uppercase tracking-widest">
+                            {selectedOrder.confirmation_email_sent 
+                              ? `Enviado em ${new Date(selectedOrder.confirmation_email_at).toLocaleString('pt-BR')}` 
+                              : 'Não enviado ou pendente'}
+                          </p>
+                        </div>
+                      </div>
+                      {!selectedOrder.confirmation_email_sent && (
+                        <button 
+                          onClick={async () => {
+                            try {
+                              const res = await fetch('/api/send-order-email', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  order: selectedOrder,
+                                  customerEmail: selectedOrder.customer_email,
+                                  customerName: selectedOrder.customer_name
+                                })
+                              });
+                              if (res.ok) {
+                                await supabase.from('store_orders').update({ confirmation_email_sent: true, confirmation_email_at: new Date().toISOString() }).eq('id', selectedOrder.id);
+                                toast.success('E-mail enviado com sucesso!');
+                                fetchData();
+                              } else {
+                                throw new Error('Falha no envio');
+                              }
+                            } catch (err) {
+                              toast.error('Erro ao reenviar e-mail');
+                            }
+                          }}
+                          className="px-4 py-2 bg-white text-primary border border-primary/20 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-primary/5 transition-all"
+                        >
+                          Reenviar
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
