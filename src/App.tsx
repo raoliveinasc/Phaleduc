@@ -1264,7 +1264,9 @@ const LojaPage = () => {
     address_line2: '',
     city: '',
     state_province: '',
-    postal_code: ''
+    postal_code: '',
+    termsAccepted: false,
+    privacyAccepted: false
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const productsRef = useRef<HTMLDivElement>(null);
@@ -1367,8 +1369,20 @@ const LojaPage = () => {
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price_cents * item.quantity), 0);
 
+  // Shipping and Tax Calculation Logic
+  const shippingCost = customerInfo.country === 'United States' ? 0 : 2500; // US$ 25.00 for international
+  const taxRate = customerInfo.country === 'United States' ? 0.07 : 0; // 7% for US, 0 for international (simplified)
+  const taxAmount = Math.round(cartTotal * taxRate);
+  const finalTotal = cartTotal + shippingCost + taxAmount;
+
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!customerInfo.termsAccepted || !customerInfo.privacyAccepted) {
+      toast.error("Você precisa aceitar os termos e a política de privacidade.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // 1. Try to find parent_id by email
@@ -1387,9 +1401,13 @@ const LojaPage = () => {
         city: customerInfo.city,
         state_province: customerInfo.state_province,
         postal_code: customerInfo.postal_code,
-        total_amount_cents: cartTotal,
+        total_amount_cents: finalTotal,
+        shipping_cost_cents: shippingCost,
+        tax_amount_cents: taxAmount,
         currency: 'USD',
         status: 'pendente',
+        terms_accepted: customerInfo.termsAccepted,
+        privacy_accepted: customerInfo.privacyAccepted,
         parent_id: parent?.id || null,
         items: cart.map(item => ({
           id: item.id,
@@ -1874,6 +1892,34 @@ const LojaPage = () => {
                           onChange={(e) => setCustomerInfo({ ...customerInfo, postal_code: e.target.value })}
                         />
                       </div>
+
+                      <div className="md:col-span-2 space-y-4 pt-4">
+                        <label className="flex items-start gap-3 cursor-pointer group">
+                          <input 
+                            type="checkbox"
+                            required
+                            className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                            checked={customerInfo.termsAccepted}
+                            onChange={(e) => setCustomerInfo({ ...customerInfo, termsAccepted: e.target.checked })}
+                          />
+                          <span className="text-xs font-medium text-secondary/60 group-hover:text-secondary transition-colors">
+                            Eu aceito os <button type="button" className="text-primary underline">Termos de Serviço</button> e as condições de venda internacional.
+                          </span>
+                        </label>
+
+                        <label className="flex items-start gap-3 cursor-pointer group">
+                          <input 
+                            type="checkbox"
+                            required
+                            className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                            checked={customerInfo.privacyAccepted}
+                            onChange={(e) => setCustomerInfo({ ...customerInfo, privacyAccepted: e.target.checked })}
+                          />
+                          <span className="text-xs font-medium text-secondary/60 group-hover:text-secondary transition-colors">
+                            Eu li e concordo com a <button type="button" className="text-primary underline">Política de Privacidade</button> e o processamento de meus dados.
+                          </span>
+                        </label>
+                      </div>
                     </div>
                   </form>
                 )}
@@ -1901,10 +1947,24 @@ const LojaPage = () => {
               </div>
 
               {cart.length > 0 && checkoutStep !== 'success' && (
-                <div className="p-8 bg-gray-50 border-t border-gray-100 space-y-6">
-                  <div className="flex justify-between items-center">
-                    <span className="text-secondary/40 font-black uppercase tracking-widest text-xs">Total do Pedido</span>
-                    <span className="text-3xl font-black text-secondary">US$ {(cartTotal / 100).toFixed(2)}</span>
+                <div className="p-8 bg-gray-50 border-t border-gray-100 space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-secondary/40 font-bold uppercase tracking-widest text-[10px]">Subtotal</span>
+                      <span className="font-black text-secondary">US$ {(cartTotal / 100).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-secondary/40 font-bold uppercase tracking-widest text-[10px]">Frete</span>
+                      <span className="font-black text-secondary">{shippingCost === 0 ? 'Grátis' : `US$ ${(shippingCost / 100).toFixed(2)}`}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-secondary/40 font-bold uppercase tracking-widest text-[10px]">Impostos (Tax)</span>
+                      <span className="font-black text-secondary">US$ {(taxAmount / 100).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                      <span className="text-secondary/40 font-black uppercase tracking-widest text-xs">Total do Pedido</span>
+                      <span className="text-3xl font-black text-secondary">US$ {(finalTotal / 100).toFixed(2)}</span>
+                    </div>
                   </div>
                   
                   {checkoutStep === 'cart' ? (

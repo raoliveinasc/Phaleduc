@@ -73,7 +73,11 @@ export const AdminLoja = () => {
     stripe_product_id: '',
     stripe_price_id: '',
     rating: 5.0,
-    is_featured: false
+    is_featured: false,
+    weight_grams: 0,
+    length_mm: 0,
+    width_mm: 0,
+    height_mm: 0
   });
 
   const [categoryFormData, setCategoryFormData] = useState({
@@ -139,7 +143,11 @@ export const AdminLoja = () => {
         stripe_product_id: product.stripe_product_id || '',
         stripe_price_id: product.stripe_price_id || '',
         rating: product.rating || 5.0,
-        is_featured: product.is_featured || false
+        is_featured: product.is_featured || false,
+        weight_grams: product.weight_grams || 0,
+        length_mm: product.length_mm || 0,
+        width_mm: product.width_mm || 0,
+        height_mm: product.height_mm || 0
       });
     } else {
       setEditingProduct(null);
@@ -155,7 +163,11 @@ export const AdminLoja = () => {
         stripe_product_id: '',
         stripe_price_id: '',
         rating: 5.0,
-        is_featured: false
+        is_featured: false,
+        weight_grams: 0,
+        length_mm: 0,
+        width_mm: 0,
+        height_mm: 0
       });
     }
     setIsModalOpen(true);
@@ -934,6 +946,48 @@ export const AdminLoja = () => {
                       </div>
                     </div>
 
+                    {/* Logística (Fase 2) */}
+                    {formData.type === 'fisico' && (
+                      <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4 p-6 bg-gray-50 rounded-[32px] border border-gray-100">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Peso (g)</label>
+                          <input 
+                            type="number"
+                            className="w-full px-4 py-3 bg-white rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary text-sm"
+                            value={formData.weight_grams}
+                            onChange={(e) => setFormData({ ...formData, weight_grams: parseInt(e.target.value) || 0 })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Comp. (mm)</label>
+                          <input 
+                            type="number"
+                            className="w-full px-4 py-3 bg-white rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary text-sm"
+                            value={formData.length_mm}
+                            onChange={(e) => setFormData({ ...formData, length_mm: parseInt(e.target.value) || 0 })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Larg. (mm)</label>
+                          <input 
+                            type="number"
+                            className="w-full px-4 py-3 bg-white rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary text-sm"
+                            value={formData.width_mm}
+                            onChange={(e) => setFormData({ ...formData, width_mm: parseInt(e.target.value) || 0 })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Alt. (mm)</label>
+                          <input 
+                            type="number"
+                            className="w-full px-4 py-3 bg-white rounded-xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary text-sm"
+                            value={formData.height_mm}
+                            onChange={(e) => setFormData({ ...formData, height_mm: parseInt(e.target.value) || 0 })}
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     {/* Upload de Imagem */}
                     <div className="md:col-span-2 space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Imagem do Produto</label>
@@ -1118,11 +1172,25 @@ export const AdminLoja = () => {
                     ) : (
                       <p className="p-6 text-center text-secondary/40 font-bold italic">Nenhum item listado.</p>
                     )}
-                    <div className="p-6 bg-gray-50 flex justify-between items-center">
-                      <p className="font-black text-secondary uppercase tracking-widest text-xs">Total do Pedido</p>
-                      <p className="text-2xl font-black text-secondary">
-                        US$ {(selectedOrder.total_amount_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </p>
+                    <div className="p-6 bg-gray-50 space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-secondary/40 font-bold uppercase tracking-widest">Subtotal</span>
+                        <span className="font-black text-secondary">US$ {((selectedOrder.total_amount_cents - (selectedOrder.shipping_cost_cents || 0) - (selectedOrder.tax_amount_cents || 0)) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-secondary/40 font-bold uppercase tracking-widest">Frete</span>
+                        <span className="font-black text-secondary">US$ {((selectedOrder.shipping_cost_cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-secondary/40 font-bold uppercase tracking-widest">Impostos (Tax)</span>
+                        <span className="font-black text-secondary">US$ {((selectedOrder.tax_amount_cents || 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                        <p className="font-black text-secondary uppercase tracking-widest text-xs">Total Final</p>
+                        <p className="text-2xl font-black text-secondary">
+                          US$ {(selectedOrder.total_amount_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
