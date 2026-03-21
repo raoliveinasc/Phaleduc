@@ -1,6 +1,25 @@
 -- Habilitar extensão para UUID
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- RESET DATABASE (OPCIONAL - USAR COM CUIDADO)
+-- DROP TABLE IF EXISTS subscriptions CASCADE;
+-- DROP TABLE IF EXISTS store_orders CASCADE;
+-- DROP TABLE IF EXISTS store_products CASCADE;
+-- DROP TABLE IF EXISTS store_categories CASCADE;
+-- DROP TABLE IF EXISTS avaliacoes_tutores CASCADE;
+-- DROP TABLE IF EXISTS missoes_casa CASCADE;
+-- DROP TABLE IF EXISTS execucoes_atividades CASCADE;
+-- DROP TABLE IF EXISTS reflexoes_familia CASCADE;
+-- DROP TABLE IF EXISTS loop_semanal_config CASCADE;
+-- DROP TABLE IF EXISTS loops_semanais CASCADE;
+-- DROP TABLE IF EXISTS biblioteca_recursos CASCADE;
+-- DROP TABLE IF EXISTS metricas_progresso CASCADE;
+-- DROP TABLE IF EXISTS feedbacks_pedagogicos CASCADE;
+-- DROP TABLE IF EXISTS alunos CASCADE;
+-- DROP TABLE IF EXISTS turmas CASCADE;
+-- DROP TABLE IF EXISTS tutores CASCADE;
+-- DROP TABLE IF EXISTS pais CASCADE;
+
 -- Tabela de Pais (Famílias)
 CREATE TABLE IF NOT EXISTS pais (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -12,7 +31,7 @@ CREATE TABLE IF NOT EXISTS pais (
     senha TEXT,
     senha_temporaria TEXT,
     convite_enviado_em TIMESTAMP WITH TIME ZONE,
-    parent_pin TEXT,
+    parent_pin TEXT DEFAULT '0000',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -34,6 +53,15 @@ CREATE TABLE IF NOT EXISTS tutores (
     badges TEXT, -- Lista de badges separados por vírgula
     projeto_final_status TEXT DEFAULT 'pendente',
     projeto_final_feedback TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Turmas
+CREATE TABLE IF NOT EXISTS turmas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nome TEXT NOT NULL,
+    nivel TEXT, -- Iniciante, Intermediário, etc
+    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL ON UPDATE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -112,15 +140,6 @@ CREATE TABLE IF NOT EXISTS loop_semanal_config (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_loop_config_aluno_semana ON loop_semanal_config (aluno_id, semana_inicio) WHERE aluno_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_loop_config_turma_semana ON loop_semanal_config (turma_id, semana_inicio) WHERE turma_id IS NOT NULL;
 
--- Tabela de Turmas
-CREATE TABLE IF NOT EXISTS turmas (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    nome TEXT NOT NULL,
-    nivel TEXT, -- Iniciante, Intermediário, etc
-    tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL ON UPDATE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Tabela de Biblioteca de Recursos
 CREATE TABLE IF NOT EXISTS biblioteca_recursos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -193,37 +212,6 @@ CREATE TABLE IF NOT EXISTS execucoes_atividades (
     UNIQUE(aluno_id, recurso_id)
 );
 
--- Enable RLS on all tables
-ALTER TABLE tutores ENABLE ROW LEVEL SECURITY;
-ALTER TABLE pais ENABLE ROW LEVEL SECURITY;
-ALTER TABLE alunos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE turmas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE biblioteca_recursos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE loops_semanais ENABLE ROW LEVEL SECURITY;
-ALTER TABLE loop_semanal_config ENABLE ROW LEVEL SECURITY;
-ALTER TABLE execucoes_atividades ENABLE ROW LEVEL SECURITY;
-ALTER TABLE metricas_progresso ENABLE ROW LEVEL SECURITY;
-ALTER TABLE feedbacks_pedagogicos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reflexoes_familia ENABLE ROW LEVEL SECURITY;
-ALTER TABLE missoes_casa ENABLE ROW LEVEL SECURITY;
-ALTER TABLE avaliacoes_tutores ENABLE ROW LEVEL SECURITY;
-
--- Basic Policies (Simplified for this environment)
--- In a real app, we would check auth.uid() against tutor_id or parent_id
-CREATE POLICY "Allow all for tutores" ON tutores FOR ALL USING (true);
-CREATE POLICY "Allow all for pais" ON pais FOR ALL USING (true);
-CREATE POLICY "Allow all for alunos" ON alunos FOR ALL USING (true);
-CREATE POLICY "Allow all for turmas" ON turmas FOR ALL USING (true);
-CREATE POLICY "Allow all for biblioteca_recursos" ON biblioteca_recursos FOR ALL USING (true);
-CREATE POLICY "Allow all for loops_semanais" ON loops_semanais FOR ALL USING (true);
-CREATE POLICY "Allow all for loop_semanal_config" ON loop_semanal_config FOR ALL USING (true);
-CREATE POLICY "Allow all for execucoes_atividades" ON execucoes_atividades FOR ALL USING (true);
-CREATE POLICY "Allow all for metricas_progresso" ON metricas_progresso FOR ALL USING (true);
-CREATE POLICY "Allow all for feedbacks_pedagogicos" ON feedbacks_pedagogicos FOR ALL USING (true);
-CREATE POLICY "Allow all for reflexoes_familia" ON reflexoes_familia FOR ALL USING (true);
-CREATE POLICY "Allow all for missoes_casa" ON missoes_casa FOR ALL USING (true);
-CREATE POLICY "Allow all for avaliacoes_tutores" ON avaliacoes_tutores FOR ALL USING (true);
-
 -- Tabela de Categorias da Loja
 CREATE TABLE IF NOT EXISTS store_categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -250,7 +238,7 @@ CREATE TABLE IF NOT EXISTS store_products (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Tabela de Pedidos (Melhorada)
+-- Tabela de Pedidos
 CREATE TABLE IF NOT EXISTS store_orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_name TEXT NOT NULL,
@@ -279,13 +267,49 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Enable RLS on store and subscription tables
+-- Função RPC para decrementar estoque
+CREATE OR REPLACE FUNCTION decrement_product_stock(product_id UUID, quantity INTEGER)
+RETURNS void AS $$
+BEGIN
+    UPDATE store_products
+    SET stock_quantity = stock_quantity - quantity
+    WHERE id = product_id AND stock_quantity >= quantity;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Enable RLS on all tables
+ALTER TABLE tutores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pais ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alunos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE turmas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE biblioteca_recursos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE loops_semanais ENABLE ROW LEVEL SECURITY;
+ALTER TABLE loop_semanal_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE execucoes_atividades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE metricas_progresso ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feedbacks_pedagogicos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reflexoes_familia ENABLE ROW LEVEL SECURITY;
+ALTER TABLE missoes_casa ENABLE ROW LEVEL SECURITY;
+ALTER TABLE avaliacoes_tutores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE store_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE store_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE store_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 
--- Basic Policies for store and subscription tables
+-- Basic Policies (Simplified for this environment)
+CREATE POLICY "Allow all for tutores" ON tutores FOR ALL USING (true);
+CREATE POLICY "Allow all for pais" ON pais FOR ALL USING (true);
+CREATE POLICY "Allow all for alunos" ON alunos FOR ALL USING (true);
+CREATE POLICY "Allow all for turmas" ON turmas FOR ALL USING (true);
+CREATE POLICY "Allow all for biblioteca_recursos" ON biblioteca_recursos FOR ALL USING (true);
+CREATE POLICY "Allow all for loops_semanais" ON loops_semanais FOR ALL USING (true);
+CREATE POLICY "Allow all for loop_semanal_config" ON loop_semanal_config FOR ALL USING (true);
+CREATE POLICY "Allow all for execucoes_atividades" ON execucoes_atividades FOR ALL USING (true);
+CREATE POLICY "Allow all for metricas_progresso" ON metricas_progresso FOR ALL USING (true);
+CREATE POLICY "Allow all for feedbacks_pedagogicos" ON feedbacks_pedagogicos FOR ALL USING (true);
+CREATE POLICY "Allow all for reflexoes_familia" ON reflexoes_familia FOR ALL USING (true);
+CREATE POLICY "Allow all for missoes_casa" ON missoes_casa FOR ALL USING (true);
+CREATE POLICY "Allow all for avaliacoes_tutores" ON avaliacoes_tutores FOR ALL USING (true);
 CREATE POLICY "Allow all for store_categories" ON store_categories FOR ALL USING (true);
 CREATE POLICY "Allow all for store_products" ON store_products FOR ALL USING (true);
 CREATE POLICY "Allow all for store_orders" ON store_orders FOR ALL USING (true);
@@ -303,17 +327,10 @@ CREATE INDEX IF NOT EXISTS idx_store_products_category_id ON store_products(cate
 CREATE INDEX IF NOT EXISTS idx_store_orders_parent_id ON store_orders(parent_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
 
--- Inserir categorias iniciais seguindo a nomenclatura da Loja Virtual
+-- Inserir categorias iniciais
 INSERT INTO store_categories (name, slug) VALUES 
 ('Mala Rosa', 'mala-rosa'),
 ('Vestuário', 'vestuario'),
 ('Educadores', 'educadores'),
 ('Biblioteca', 'biblioteca')
 ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name;
-
--- Inserir alguns pedidos de exemplo para o dashboard
-INSERT INTO store_orders (customer_name, customer_email, total_amount_cents, status, items) VALUES
-('João Silva', 'joao@email.com', 1500, 'pago', '[{"name": "Livro de Alfabetização", "price": 500, "quantity": 3}]'),
-('Maria Oliveira', 'maria@email.com', 899, 'pendente', '[{"name": "Kit de Jogos Pedagógicos", "price": 899, "quantity": 1}]'),
-('Carlos Souza', 'carlos@email.com', 2500, 'pago', '[{"name": "Curso de Formação de Tutores", "price": 2500, "quantity": 1}]')
-ON CONFLICT DO NOTHING;

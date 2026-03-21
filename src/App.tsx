@@ -54,6 +54,7 @@ import {
   Filter,
   LogOut,
   ChevronDown,
+  ChevronLeft,
   Brain,
   Sparkles,
   Mic,
@@ -1278,13 +1279,31 @@ const LojaPage = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [prodRes, catRes] = await Promise.all([
+        const [prodRes, catRes, sessionRes] = await Promise.all([
           supabase.from('store_products').select('*, store_categories(name)').order('created_at', { ascending: false }),
-          supabase.from('store_categories').select('*').order('name')
+          supabase.from('store_categories').select('*').order('name'),
+          supabase.auth.getSession()
         ]);
         
         if (prodRes.data) setProducts(prodRes.data);
         if (catRes.data) setCategories(catRes.data);
+
+        // Auto-fill customer info if logged in
+        if (sessionRes.data.session?.user) {
+          const { data: parent } = await supabase
+            .from('pais')
+            .select('nome, email, endereco')
+            .eq('id', sessionRes.data.session.user.id)
+            .maybeSingle();
+          
+          if (parent) {
+            setCustomerInfo({
+              name: parent.nome || '',
+              email: parent.email || '',
+              address: parent.endereco || ''
+            });
+          }
+        }
       } catch (error) {
         console.error('Error fetching store data:', error);
       } finally {
@@ -1342,12 +1361,12 @@ const LojaPage = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      // Try to find parent_id by email
+      // 1. Try to find parent_id by email
       const { data: parent } = await supabase
         .from('pais')
         .select('id')
         .eq('email', customerInfo.email)
-        .single();
+        .maybeSingle();
 
       const orderData = {
         customer_name: customerInfo.name,
@@ -1360,18 +1379,59 @@ const LojaPage = () => {
           id: item.id,
           name: item.name,
           price: item.price_cents,
-          quantity: item.quantity
+          quantity: item.quantity,
+          type: item.type,
+          is_subscription_activator: item.is_subscription_activator
         }))
       };
 
-      const { error } = await supabase.from('store_orders').insert([orderData]);
-      if (error) throw error;
+      // 2. Insert Order
+      const { data: newOrder, error: orderError } = await supabase
+        .from('store_orders')
+        .insert([orderData])
+        .select()
+        .single();
+      
+      if (orderError) throw orderError;
+
+      // 3. Process each item (Stock & Subscriptions)
+      for (const item of cart) {
+        // Update Stock for physical products
+        if (item.type === 'fisico') {
+          const { error: stockError } = await supabase.rpc('decrement_product_stock', {
+            product_id: item.id,
+            quantity: item.quantity
+          });
+          if (stockError) console.error(`Error updating stock for ${item.name}:`, stockError);
+        }
+
+        // Handle Subscription Activation
+        if (item.is_subscription_activator && parent?.id) {
+          // Determine plan type based on product name or metadata
+          const planType = item.name.toLowerCase().includes('anual') ? 'anual' : 
+                          item.name.toLowerCase().includes('semestral') ? 'semestral' : 'mensal';
+          
+          const durationDays = planType === 'anual' ? 365 : planType === 'semestral' ? 180 : 30;
+          const expiration = new Date();
+          expiration.setDate(expiration.getDate() + durationDays);
+
+          await supabase.from('subscriptions').upsert({
+            user_id: parent.id,
+            plan_type: planType,
+            status: 'active',
+            current_period_start: new Date().toISOString(),
+            current_period_end: expiration.toISOString(),
+            stripe_customer_id: 'store_purchase'
+          }, { onConflict: 'user_id' });
+        }
+      }
 
       setCheckoutStep('success');
       setCart([]);
+      toast.success('Pedido realizado com sucesso!');
     } catch (error) {
       console.error('Error placing order:', error);
-      alert('Erro ao processar pedido. Tente novamente.');
+      toast.error('Erro ao processar pedido. Tente novamente.');
     } finally {
       setIsSubmitting(false);
     }
@@ -3097,9 +3157,118 @@ const PinVerificationModal = ({
   );
 };
 
+const MaterialsView = ({ parentId, onBack }: { parentId: string, onBack: () => void }) => {
+  const [materials, setMaterials] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMaterials = async () => {
+      setLoading(true);
+      try {
+        // Fetch paid orders for this parent
+        const { data: orders, error } = await supabase
+          .from('store_orders')
+          .select('items')
+          .eq('parent_id', parentId)
+          .eq('status', 'pago');
+        
+        if (error) throw error;
+
+        // Extract digital items
+        const digitalItems: any[] = [];
+        orders?.forEach(order => {
+          const items = order.items as any[];
+          items.forEach(item => {
+            if (item.type === 'digital') {
+              digitalItems.push(item);
+            }
+          });
+        });
+
+        // Remove duplicates by ID
+        const uniqueMaterials = digitalItems.filter((item, index, self) =>
+          index === self.findIndex((t) => t.id === item.id)
+        );
+        setMaterials(uniqueMaterials);
+      } catch (err) {
+        console.error('Error fetching materials:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMaterials();
+  }, [parentId]);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="min-h-[calc(100vh-112px)] bg-white p-8 md:p-12 lg:p-20"
+    >
+      <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-16">
+        <div>
+          <div className="flex items-center gap-3 text-primary font-black uppercase tracking-widest text-xs mb-2">
+            <BookOpen className="w-4 h-4" /> Meus Materiais Digitais
+          </div>
+          <h2 className="text-4xl md:text-5xl font-black text-secondary tracking-tighter">Biblioteca da Família</h2>
+          <p className="text-secondary/40 font-medium mt-2">Acesse seus conteúdos digitais adquiridos na loja.</p>
+        </div>
+        <button 
+          onClick={onBack}
+          className="px-8 py-4 bg-gray-100 text-secondary rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-gray-200 transition-all flex items-center gap-2"
+        >
+          <ChevronLeft className="w-5 h-5" /> Voltar ao Painel
+        </button>
+      </header>
+
+      <div className="max-w-7xl mx-auto">
+        {loading ? (
+          <div className="py-20 text-center">
+            <Loader2 className="w-10 h-10 text-primary animate-spin mx-auto mb-4" />
+            <p className="font-bold text-secondary/40">Buscando seus materiais...</p>
+          </div>
+        ) : materials.length === 0 ? (
+          <div className="py-20 text-center bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200">
+            <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-secondary/10 mx-auto mb-6">
+              <Package className="w-10 h-10" />
+            </div>
+            <h3 className="text-2xl font-black text-secondary mb-2">Sua biblioteca está vazia</h3>
+            <p className="text-secondary/40 font-medium mb-8">Você ainda não adquiriu materiais digitais na nossa loja.</p>
+            <button 
+              onClick={() => window.location.href = '/loja'}
+              className="px-10 py-4 bg-primary text-white rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-primary/20"
+            >
+              Visitar a Loja
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {materials.map((item) => (
+              <div key={item.id} className="bg-white rounded-[40px] border border-gray-100 p-8 shadow-xl shadow-black/5 group hover:border-primary/30 transition-all">
+                <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center text-primary mb-6 group-hover:scale-110 transition-transform">
+                  <FileText className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-black text-secondary mb-2">{item.name}</h3>
+                <p className="text-sm text-secondary/40 font-medium mb-8">Material digital em formato PDF para impressão e atividades.</p>
+                <button 
+                  className="w-full py-4 bg-secondary text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-primary transition-all flex items-center justify-center gap-2"
+                  onClick={() => toast.info('O link de download será enviado para seu e-mail ou aberto em nova aba.')}
+                >
+                  <Download className="w-4 h-4" /> Baixar Agora
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
 const AlunosPaisPage = () => {
   const navigate = useNavigate();
-  const [view, setView] = useState<'login' | 'register' | 'profiles' | 'child' | 'parent' | 'onboarding'>('login');
+  const [view, setView] = useState<'login' | 'register' | 'profiles' | 'child' | 'parent' | 'onboarding' | 'materials'>('login');
   const [onboardingStep, setOnboardingStep] = useState<'password' | 'pin' | 'children'>('password');
   const [selectedChild, setSelectedChild] = useState<any | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
@@ -4138,6 +4307,13 @@ const AlunosPaisPage = () => {
           </motion.div>
         )}
 
+        {view === 'materials' && (
+          <MaterialsView 
+            parentId={user?.id} 
+            onBack={() => setView('parent')} 
+          />
+        )}
+
         {view === 'parent' && (
           <motion.div 
             key="parent"
@@ -4159,12 +4335,20 @@ const AlunosPaisPage = () => {
                   <Settings className="w-4 h-4" /> Configurações de Segurança
                 </button>
               </div>
-              <button 
-                onClick={() => setView('profiles')}
-                className="px-8 py-4 bg-secondary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-secondary/90 transition-all flex items-center gap-2"
-              >
-                Sair do Painel
-              </button>
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setView('materials')}
+                  className="px-8 py-4 bg-primary/10 text-primary rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary/20 transition-all flex items-center gap-2"
+                >
+                  <BookOpen className="w-5 h-5" /> Meus Materiais
+                </button>
+                <button 
+                  onClick={() => setView('profiles')}
+                  className="px-8 py-4 bg-secondary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-secondary/90 transition-all flex items-center gap-2"
+                >
+                  Sair do Painel
+                </button>
+              </div>
             </header>
 
             <AnimatePresence>
