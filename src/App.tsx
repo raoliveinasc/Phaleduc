@@ -80,6 +80,11 @@ import {
   Loader2,
   Minus
 } from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+
+// Initialize Stripe (Simulated for now)
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51Placeholder');
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ResponsiveContainer, 
@@ -1269,6 +1274,7 @@ const LojaPage = () => {
     privacyAccepted: false
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const productsRef = useRef<HTMLDivElement>(null);
 
   const scrollToProducts = () => {
@@ -1312,7 +1318,9 @@ const LojaPage = () => {
               address_line2: parent.address_line2 || '',
               city: parent.city || '',
               state_province: parent.state_province || '',
-              postal_code: parent.postal_code || ''
+              postal_code: parent.postal_code || '',
+              termsAccepted: false,
+              privacyAccepted: false
             });
           }
         }
@@ -1385,6 +1393,32 @@ const LojaPage = () => {
 
     setIsSubmitting(true);
     try {
+      // 1. Create Payment Intent on our server
+      const response = await fetch('/api/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: finalTotal, // cents
+          currency: 'usd',
+          customerEmail: customerInfo.email
+        }),
+      });
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      
+      setClientSecret(data.clientSecret);
+      setCheckoutStep('payment' as any); // New step for payment
+    } catch (error: any) {
+      console.error('Error initiating checkout:', error);
+      toast.error(error.message || 'Erro ao iniciar checkout.');
+      setIsSubmitting(false);
+    }
+  };
+
+  const finalizeOrder = async (paymentIntentId?: string) => {
+    setIsSubmitting(true);
+    try {
       // 1. Try to find parent_id by email
       const { data: parent } = await supabase
         .from('pais')
@@ -1405,7 +1439,8 @@ const LojaPage = () => {
         shipping_cost_cents: shippingCost,
         tax_amount_cents: taxAmount,
         currency: 'USD',
-        status: 'pendente',
+        status: 'pago', // Now it's paid
+        stripe_payment_intent_id: paymentIntentId,
         terms_accepted: customerInfo.termsAccepted,
         privacy_accepted: customerInfo.privacyAccepted,
         parent_id: parent?.id || null,
@@ -1441,7 +1476,6 @@ const LojaPage = () => {
 
         // Handle Subscription Activation
         if (item.is_subscription_activator && parent?.id) {
-          // Determine plan type based on product name or metadata
           const planType = item.name.toLowerCase().includes('anual') ? 'anual' : 
                           item.name.toLowerCase().includes('semestral') ? 'semestral' : 'mensal';
           
@@ -1462,13 +1496,93 @@ const LojaPage = () => {
 
       setCheckoutStep('success');
       setCart([]);
-      toast.success('Pedido realizado com sucesso!');
+      toast.success('Pagamento confirmado e pedido realizado!');
     } catch (error) {
-      console.error('Error placing order:', error);
-      toast.error('Erro ao processar pedido. Tente novamente.');
+      console.error('Error finalizing order:', error);
+      toast.error('Erro ao finalizar pedido. O pagamento foi processado, entre em contato com o suporte.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const PaymentForm = ({ clientSecret, onCancel, onSuccess }: { clientSecret: string, onCancel: () => void, onSuccess: (id: string) => void }) => {
+    const stripe = useStripe();
+    const elements = useElements();
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!stripe || !elements) return;
+
+      setIsProcessing(true);
+
+      // Simulation mode check
+      if (clientSecret.startsWith('pi_simulated')) {
+        setTimeout(() => {
+          onSuccess(clientSecret);
+          setIsProcessing(false);
+        }, 1500);
+        return;
+      }
+
+      const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: elements.getElement(CardElement)!,
+          billing_details: {
+            name: customerInfo.name,
+            email: customerInfo.email,
+          },
+        },
+      });
+
+      if (error) {
+        toast.error(error.message || 'Erro no pagamento');
+        setIsProcessing(false);
+      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+        onSuccess(paymentIntent.id);
+      }
+    };
+
+    return (
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="p-4 border-2 border-gray-100 rounded-2xl bg-gray-50">
+          <CardElement options={{
+            style: {
+              base: {
+                fontSize: '16px',
+                color: '#141414',
+                '::placeholder': { color: '#aab7c4' },
+              },
+              invalid: { color: '#9e2146' },
+            },
+          }} />
+        </div>
+        
+        <div className="flex gap-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 py-4 bg-gray-100 text-secondary font-black rounded-2xl hover:bg-gray-200 transition-all"
+          >
+            Voltar
+          </button>
+          <button
+            type="submit"
+            disabled={!stripe || isProcessing}
+            className="flex-1 py-4 bg-primary text-white font-black rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isProcessing ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <ShieldCheck className="w-5 h-5" />
+                Pagar US$ {(finalTotal / 100).toFixed(2)}
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    );
   };
 
   return (
@@ -1805,123 +1919,149 @@ const LojaPage = () => {
                 )}
 
                 {checkoutStep === 'info' && (
-                  <form id="checkout-form" onSubmit={handleCheckout} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Nome Completo</label>
-                        <input 
-                          required
-                          type="text"
-                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
-                          value={customerInfo.name}
-                          onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">E-mail</label>
-                        <input 
-                          required
-                          type="email"
-                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
-                          value={customerInfo.email}
-                          onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">País</label>
-                        <select 
-                          required
-                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
-                          value={customerInfo.country}
-                          onChange={(e) => setCustomerInfo({ ...customerInfo, country: e.target.value })}
-                        >
-                          <option value="United States">United States</option>
-                          <option value="Brazil">Brazil</option>
-                          <option value="Portugal">Portugal</option>
-                          <option value="United Kingdom">United Kingdom</option>
-                          <option value="Canada">Canada</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Endereço (Rua, Número)</label>
-                        <input 
-                          required
-                          type="text"
-                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
-                          value={customerInfo.address_line1}
-                          onChange={(e) => setCustomerInfo({ ...customerInfo, address_line1: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Apto / Suíte / Complemento</label>
-                        <input 
-                          type="text"
-                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
-                          value={customerInfo.address_line2}
-                          onChange={(e) => setCustomerInfo({ ...customerInfo, address_line2: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Cidade</label>
-                        <input 
-                          required
-                          type="text"
-                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
-                          value={customerInfo.city}
-                          onChange={(e) => setCustomerInfo({ ...customerInfo, city: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Estado / Província</label>
-                        <input 
-                          required
-                          type="text"
-                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
-                          value={customerInfo.state_province}
-                          onChange={(e) => setCustomerInfo({ ...customerInfo, state_province: e.target.value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">ZIP / Código Postal</label>
-                        <input 
-                          required
-                          type="text"
-                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
-                          value={customerInfo.postal_code}
-                          onChange={(e) => setCustomerInfo({ ...customerInfo, postal_code: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="md:col-span-2 space-y-4 pt-4">
-                        <label className="flex items-start gap-3 cursor-pointer group">
+                  <div className="space-y-6">
+                    <form id="checkout-form" onSubmit={handleCheckout} className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Nome Completo</label>
                           <input 
-                            type="checkbox"
                             required
-                            className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
-                            checked={customerInfo.termsAccepted}
-                            onChange={(e) => setCustomerInfo({ ...customerInfo, termsAccepted: e.target.checked })}
+                            type="text"
+                            className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                            value={customerInfo.name}
+                            onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
                           />
-                          <span className="text-xs font-medium text-secondary/60 group-hover:text-secondary transition-colors">
-                            Eu aceito os <button type="button" className="text-primary underline">Termos de Serviço</button> e as condições de venda internacional.
-                          </span>
-                        </label>
-
-                        <label className="flex items-start gap-3 cursor-pointer group">
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">E-mail</label>
                           <input 
-                            type="checkbox"
                             required
-                            className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
-                            checked={customerInfo.privacyAccepted}
-                            onChange={(e) => setCustomerInfo({ ...customerInfo, privacyAccepted: e.target.checked })}
+                            type="email"
+                            className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                            value={customerInfo.email}
+                            onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
                           />
-                          <span className="text-xs font-medium text-secondary/60 group-hover:text-secondary transition-colors">
-                            Eu li e concordo com a <button type="button" className="text-primary underline">Política de Privacidade</button> e o processamento de meus dados.
-                          </span>
-                        </label>
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">País</label>
+                          <select 
+                            required
+                            className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                            value={customerInfo.country}
+                            onChange={(e) => setCustomerInfo({ ...customerInfo, country: e.target.value })}
+                          >
+                            <option value="United States">United States</option>
+                            <option value="Brazil">Brazil</option>
+                            <option value="Portugal">Portugal</option>
+                            <option value="United Kingdom">United Kingdom</option>
+                            <option value="Canada">Canada</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Endereço (Rua, Número)</label>
+                          <input 
+                            required
+                            type="text"
+                            className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                            value={customerInfo.address_line1}
+                            onChange={(e) => setCustomerInfo({ ...customerInfo, address_line1: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Apto / Suíte / Complemento</label>
+                          <input 
+                            type="text"
+                            className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                            value={customerInfo.address_line2}
+                            onChange={(e) => setCustomerInfo({ ...customerInfo, address_line2: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Cidade</label>
+                          <input 
+                            required
+                            type="text"
+                            className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                            value={customerInfo.city}
+                            onChange={(e) => setCustomerInfo({ ...customerInfo, city: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Estado / Província</label>
+                          <input 
+                            required
+                            type="text"
+                            className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                            value={customerInfo.state_province}
+                            onChange={(e) => setCustomerInfo({ ...customerInfo, state_province: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">ZIP / Código Postal</label>
+                          <input 
+                            required
+                            type="text"
+                            className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                            value={customerInfo.postal_code}
+                            onChange={(e) => setCustomerInfo({ ...customerInfo, postal_code: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="md:col-span-2 space-y-4 pt-4">
+                          <label className="flex items-start gap-3 cursor-pointer group">
+                            <input 
+                              type="checkbox"
+                              required
+                              className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                              checked={customerInfo.termsAccepted}
+                              onChange={(e) => setCustomerInfo({ ...customerInfo, termsAccepted: e.target.checked })}
+                            />
+                            <span className="text-xs font-medium text-secondary/60 group-hover:text-secondary transition-colors">
+                              Eu aceito os <button type="button" className="text-primary underline">Termos de Serviço</button> e as condições de venda internacional.
+                            </span>
+                          </label>
+
+                          <label className="flex items-start gap-3 cursor-pointer group">
+                            <input 
+                              type="checkbox"
+                              required
+                              className="mt-1 w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                              checked={customerInfo.privacyAccepted}
+                              onChange={(e) => setCustomerInfo({ ...customerInfo, privacyAccepted: e.target.checked })}
+                            />
+                            <span className="text-xs font-medium text-secondary/60 group-hover:text-secondary transition-colors">
+                              Eu li e concordo com a <button type="button" className="text-primary underline">Política de Privacidade</button> e o processamento de meus dados.
+                            </span>
+                          </label>
+                        </div>
                       </div>
+                    </form>
+                  </div>
+                )}
+
+                {(checkoutStep as any) === 'payment' && clientSecret && (
+                  <div className="space-y-8">
+                    <div className="text-center space-y-2">
+                      <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto text-primary">
+                        <CreditCard className="w-8 h-8" />
+                      </div>
+                      <h3 className="text-2xl font-black text-secondary tracking-tighter uppercase">Pagamento Seguro</h3>
+                      <p className="text-xs font-medium text-secondary/40 uppercase tracking-widest">Processado pelo Stripe em USD</p>
                     </div>
-                  </form>
+
+                    <PaymentForm 
+                      clientSecret={clientSecret} 
+                      onCancel={() => setCheckoutStep('info')}
+                      onSuccess={(id) => finalizeOrder(id)}
+                    />
+
+                    <div className="flex items-center justify-center gap-6 opacity-40 grayscale pt-4">
+                      <img src="https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg" alt="Visa" className="h-4" referrerPolicy="no-referrer" />
+                      <img src="https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg" alt="Mastercard" className="h-6" referrerPolicy="no-referrer" />
+                      <img src="https://upload.wikimedia.org/wikipedia/commons/b/ba/Stripe_Logo%2C_revised_2016.svg" alt="Stripe" className="h-6" referrerPolicy="no-referrer" />
+                    </div>
+                  </div>
                 )}
 
                 {checkoutStep === 'success' && (
@@ -1946,7 +2086,7 @@ const LojaPage = () => {
                 )}
               </div>
 
-              {cart.length > 0 && checkoutStep !== 'success' && (
+              {cart.length > 0 && checkoutStep !== 'success' && (checkoutStep as any) !== 'payment' && (
                 <div className="p-8 bg-gray-50 border-t border-gray-100 space-y-4">
                   <div className="space-y-2">
                     <div className="flex justify-between items-center text-sm">
@@ -7046,7 +7186,11 @@ function AppContent() {
             <Route path="/" element={<HomePage />} />
             <Route path="/sobre" element={<SobrePage />} />
             <Route path="/aulas" element={<AulasPage />} />
-            <Route path="/loja" element={<LojaPage />} />
+            <Route path="/loja" element={
+              <Elements stripe={stripePromise}>
+                <LojaPage />
+              </Elements>
+            } />
             <Route path="/assinaturas" element={<AssinaturasPage />} />
             <Route path="/depoimentos" element={<DepoimentosPage />} />
             <Route path="/fotos" element={<FotosPage />} />
