@@ -452,7 +452,7 @@ export const AdminLoja = () => {
           <div>
             <p className="text-secondary/40 font-black uppercase text-[10px] tracking-widest">Total de Vendas</p>
             <p className="text-4xl font-black text-secondary">
-              {loading ? '...' : `$ ${stats.totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+              {loading ? '...' : `US$ ${stats.totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
             </p>
           </div>
         </div>
@@ -615,7 +615,7 @@ export const AdminLoja = () => {
                         )}
                       </td>
                       <td className="px-8 py-6">
-                        <p className="font-bold text-secondary">$ {(product.price_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                        <p className="font-bold text-secondary">US$ {(product.price_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                       </td>
                       <td className="px-8 py-6">
                         <span className="px-3 py-1 bg-gray-100 rounded-full text-[10px] font-black uppercase tracking-widest text-secondary/60">
@@ -706,7 +706,7 @@ export const AdminLoja = () => {
                       </td>
                       <td className="px-8 py-6">
                         <p className="font-black text-secondary">
-                          $ {(order.total_amount_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          US$ {(order.total_amount_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </p>
                       </td>
                       <td className="px-8 py-6">
@@ -810,7 +810,7 @@ export const AdminLoja = () => {
                         value={formData.price_cents}
                         onChange={(e) => setFormData({ ...formData, price_cents: parseInt(e.target.value) || 0 })}
                       />
-                      <p className="text-[10px] text-secondary/40 ml-2">Ex: 1000 = $ 10.00</p>
+                      <p className="text-[10px] text-secondary/40 ml-2">Ex: 1000 = US$ 10.00</p>
                     </div>
 
                     {/* Estoque */}
@@ -1082,9 +1082,18 @@ export const AdminLoja = () => {
                     <MapPin className="w-3 h-3" />
                     Endereço de Entrega
                   </h4>
-                  <p className="p-6 bg-gray-50 rounded-3xl text-sm font-medium text-secondary/70 leading-relaxed border border-gray-100">
-                    {selectedOrder.shipping_address || 'Endereço não informado ou produto digital.'}
-                  </p>
+                  <div className="p-6 bg-gray-50 rounded-3xl text-sm font-medium text-secondary/70 leading-relaxed border border-gray-100">
+                    {selectedOrder.country ? (
+                      <div className="space-y-1">
+                        <p className="font-black text-secondary">{selectedOrder.address_line1}</p>
+                        {selectedOrder.address_line2 && <p>{selectedOrder.address_line2}</p>}
+                        <p>{selectedOrder.city}, {selectedOrder.state_province} {selectedOrder.postal_code}</p>
+                        <p className="uppercase tracking-widest text-[10px] font-black text-primary mt-2">{selectedOrder.country}</p>
+                      </div>
+                    ) : (
+                      <p>{selectedOrder.shipping_address || 'Endereço não informado ou produto digital.'}</p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Itens */}
@@ -1099,10 +1108,10 @@ export const AdminLoja = () => {
                         <div key={idx} className="p-6 flex justify-between items-center bg-white">
                           <div>
                             <p className="font-black text-secondary">{item.name}</p>
-                            <p className="text-xs text-secondary/40 font-bold">{item.quantity}x $ {(item.price / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                            <p className="text-xs text-secondary/40 font-bold">{item.quantity}x US$ {(item.price / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
                           </div>
                           <p className="font-black text-primary">
-                            $ {( (item.price * item.quantity) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            US$ {( (item.price * item.quantity) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </p>
                         </div>
                       ))
@@ -1112,7 +1121,7 @@ export const AdminLoja = () => {
                     <div className="p-6 bg-gray-50 flex justify-between items-center">
                       <p className="font-black text-secondary uppercase tracking-widest text-xs">Total do Pedido</p>
                       <p className="text-2xl font-black text-secondary">
-                        $ {(selectedOrder.total_amount_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        US$ {(selectedOrder.total_amount_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </p>
                     </div>
                   </div>

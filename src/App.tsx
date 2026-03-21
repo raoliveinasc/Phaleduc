@@ -1259,7 +1259,12 @@ const LojaPage = () => {
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     email: '',
-    address: ''
+    country: 'United States',
+    address_line1: '',
+    address_line2: '',
+    city: '',
+    state_province: '',
+    postal_code: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const productsRef = useRef<HTMLDivElement>(null);
@@ -1292,7 +1297,7 @@ const LojaPage = () => {
         if (sessionRes.data.session?.user) {
           const { data: parent } = await supabase
             .from('pais')
-            .select('nome, email, endereco')
+            .select('nome, email, address_line1, address_line2, city, state_province, postal_code, country')
             .eq('id', sessionRes.data.session.user.id)
             .maybeSingle();
           
@@ -1300,7 +1305,12 @@ const LojaPage = () => {
             setCustomerInfo({
               name: parent.nome || '',
               email: parent.email || '',
-              address: parent.endereco || ''
+              country: parent.country || 'United States',
+              address_line1: parent.address_line1 || '',
+              address_line2: parent.address_line2 || '',
+              city: parent.city || '',
+              state_province: parent.state_province || '',
+              postal_code: parent.postal_code || ''
             });
           }
         }
@@ -1371,8 +1381,14 @@ const LojaPage = () => {
       const orderData = {
         customer_name: customerInfo.name,
         customer_email: customerInfo.email,
-        shipping_address: customerInfo.address,
+        country: customerInfo.country,
+        address_line1: customerInfo.address_line1,
+        address_line2: customerInfo.address_line2,
+        city: customerInfo.city,
+        state_province: customerInfo.state_province,
+        postal_code: customerInfo.postal_code,
         total_amount_cents: cartTotal,
+        currency: 'USD',
         status: 'pendente',
         parent_id: parent?.id || null,
         items: cart.map(item => ({
@@ -1658,7 +1674,7 @@ const LojaPage = () => {
                     
                     <div className="flex items-center justify-between pt-4 border-t border-gray-50">
                       <span className="text-2xl font-black text-secondary">
-                        $ {(product.price_cents / 100).toFixed(2)}
+                        US$ {(product.price_cents / 100).toFixed(2)}
                       </span>
                       <button 
                         onClick={() => addToCart(product)}
@@ -1741,7 +1757,7 @@ const LojaPage = () => {
                           </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="font-black text-secondary text-sm truncate">{item.name}</h4>
-                            <p className="text-primary font-black text-sm">$ {(item.price_cents / 100).toFixed(2)}</p>
+                            <p className="text-primary font-black text-sm">US$ {(item.price_cents / 100).toFixed(2)}</p>
                             <div className="flex items-center gap-3 mt-2">
                               <button 
                                 onClick={() => updateQuantity(item.id, -1)}
@@ -1772,38 +1788,92 @@ const LojaPage = () => {
 
                 {checkoutStep === 'info' && (
                   <form id="checkout-form" onSubmit={handleCheckout} className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Nome Completo</label>
-                      <input 
-                        required
-                        type="text"
-                        className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary/20 focus:bg-white outline-none font-bold text-secondary transition-all"
-                        placeholder="Seu nome"
-                        value={customerInfo.name}
-                        onChange={(e) => setCustomerInfo(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">E-mail</label>
-                      <input 
-                        required
-                        type="email"
-                        className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary/20 focus:bg-white outline-none font-bold text-secondary transition-all"
-                        placeholder="seu@email.com"
-                        value={customerInfo.email}
-                        onChange={(e) => setCustomerInfo(prev => ({ ...prev, email: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Endereço de Entrega</label>
-                      <textarea 
-                        required
-                        rows={3}
-                        className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary/20 focus:bg-white outline-none font-bold text-secondary transition-all resize-none"
-                        placeholder="Rua, número, cidade, país..."
-                        value={customerInfo.address}
-                        onChange={(e) => setCustomerInfo(prev => ({ ...prev, address: e.target.value }))}
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Nome Completo</label>
+                        <input 
+                          required
+                          type="text"
+                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                          value={customerInfo.name}
+                          onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">E-mail</label>
+                        <input 
+                          required
+                          type="email"
+                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                          value={customerInfo.email}
+                          onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">País</label>
+                        <select 
+                          required
+                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                          value={customerInfo.country}
+                          onChange={(e) => setCustomerInfo({ ...customerInfo, country: e.target.value })}
+                        >
+                          <option value="United States">United States</option>
+                          <option value="Brazil">Brazil</option>
+                          <option value="Portugal">Portugal</option>
+                          <option value="United Kingdom">United Kingdom</option>
+                          <option value="Canada">Canada</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Endereço (Rua, Número)</label>
+                        <input 
+                          required
+                          type="text"
+                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                          value={customerInfo.address_line1}
+                          onChange={(e) => setCustomerInfo({ ...customerInfo, address_line1: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Apto / Suíte / Complemento</label>
+                        <input 
+                          type="text"
+                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                          value={customerInfo.address_line2}
+                          onChange={(e) => setCustomerInfo({ ...customerInfo, address_line2: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Cidade</label>
+                        <input 
+                          required
+                          type="text"
+                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                          value={customerInfo.city}
+                          onChange={(e) => setCustomerInfo({ ...customerInfo, city: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">Estado / Província</label>
+                        <input 
+                          required
+                          type="text"
+                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                          value={customerInfo.state_province}
+                          onChange={(e) => setCustomerInfo({ ...customerInfo, state_province: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-secondary/40 ml-2">ZIP / Código Postal</label>
+                        <input 
+                          required
+                          type="text"
+                          className="w-full px-6 py-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold text-secondary"
+                          value={customerInfo.postal_code}
+                          onChange={(e) => setCustomerInfo({ ...customerInfo, postal_code: e.target.value })}
+                        />
+                      </div>
                     </div>
                   </form>
                 )}
@@ -1834,7 +1904,7 @@ const LojaPage = () => {
                 <div className="p-8 bg-gray-50 border-t border-gray-100 space-y-6">
                   <div className="flex justify-between items-center">
                     <span className="text-secondary/40 font-black uppercase tracking-widest text-xs">Total do Pedido</span>
-                    <span className="text-3xl font-black text-secondary">$ {(cartTotal / 100).toFixed(2)}</span>
+                    <span className="text-3xl font-black text-secondary">US$ {(cartTotal / 100).toFixed(2)}</span>
                   </div>
                   
                   {checkoutStep === 'cart' ? (
