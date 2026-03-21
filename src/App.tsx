@@ -1530,6 +1530,35 @@ const LojaPage = () => {
       setCheckoutStep('success');
       setCart([]);
       toast.success('Pagamento confirmado e pedido realizado!');
+
+      // 4. Send Confirmation Email
+      try {
+        const emailRes = await fetch('/api/send-order-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order: orderData,
+            customerEmail: customerInfo.email,
+            customerName: customerInfo.name
+          })
+        });
+
+        if (emailRes.ok) {
+          // Mark as sent in DB
+          await supabase
+            .from('store_orders')
+            .update({ 
+              confirmation_email_sent: true,
+              confirmation_email_at: new Date().toISOString()
+            })
+            .eq('id', newOrder.id);
+          
+          logAuditAction('order_confirmation_email_sent', { orderId: newOrder.id });
+        }
+      } catch (emailError) {
+        console.error('Error triggering confirmation email:', emailError);
+        logAuditAction('order_confirmation_email_failed', { orderId: newOrder.id, error: emailError });
+      }
     } catch (error) {
       console.error('Error finalizing order:', error);
       toast.error('Erro ao finalizar pedido. O pagamento foi processado, entre em contato com o suporte.');
