@@ -55,6 +55,28 @@ async function startServer() {
   // Regular JSON middleware for other routes
   app.use(express.json());
 
+  // API Route: Create Stripe Customer Portal Session
+  app.post('/api/create-portal-session', async (req, res) => {
+    const { customerId } = req.body;
+
+    try {
+      if (stripeSecretKey.includes('Placeholder')) {
+        const origin = req.headers.origin || 'http://localhost:3000';
+        return res.json({ url: `${origin}/alunos-pais?portal_simulated=true` });
+      }
+
+      const session = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${req.headers.origin}/alunos-pais`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error('Error creating portal session:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // API Route: Create Payment Intent
   app.post('/api/create-payment-intent', async (req, res) => {
     const { amount, currency, orderId, customerEmail } = req.body;

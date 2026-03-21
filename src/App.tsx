@@ -1259,6 +1259,8 @@ const LojaPage = () => {
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<any[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [selectedProductForDetails, setSelectedProductForDetails] = useState<any | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<any | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'info' | 'success'>('cart');
   const [customerInfo, setCustomerInfo] = useState({
@@ -1293,7 +1295,7 @@ const LojaPage = () => {
       setLoading(true);
       try {
         const [prodRes, catRes, sessionRes] = await Promise.all([
-          supabase.from('store_products').select('*, store_categories(name)').order('created_at', { ascending: false }),
+          supabase.from('store_products').select('*, store_categories(name), product_variants(*)').order('created_at', { ascending: false }),
           supabase.from('store_categories').select('*').order('name'),
           supabase.auth.getSession()
         ]);
@@ -1348,26 +1350,44 @@ const LojaPage = () => {
     'biblioteca': { icon: BookOpen, color: 'bg-accent', desc: 'Livros físicos curados' },
   };
 
-  const addToCart = (product: any) => {
+  const addToCart = (product: any, variant?: any) => {
+    // If product has variants but none selected, open modal
+    if (product.product_variants?.length > 0 && !variant) {
+      setSelectedProductForDetails(product);
+      setSelectedVariant(null);
+      return;
+    }
+
+    const cartItemId = variant ? `${product.id}-${variant.id}` : product.id;
+    const sku = variant?.sku || product.sku || `SKU-${product.id.slice(0, 4)}`;
+
     setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
+      const existing = prev.find(item => item.cartItemId === cartItemId);
       if (existing) {
-        return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+        return prev.map(item => item.cartItemId === cartItemId ? { ...item, quantity: item.quantity + 1 } : item);
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, { 
+        ...product, 
+        cartItemId, 
+        variant, 
+        sku,
+        quantity: 1 
+      }];
     });
+    
     setIsCartOpen(true);
     setCheckoutStep('cart');
-    toast.success(`${product.name} adicionado à mochila!`);
+    setSelectedProductForDetails(null);
+    toast.success(`${product.name}${variant ? ` (${variant.name})` : ''} adicionado à mochila!`);
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.id !== productId));
+  const removeFromCart = (cartItemId: string) => {
+    setCart(prev => prev.filter(item => item.cartItemId !== cartItemId));
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
+  const updateQuantity = (cartItemId: string, delta: number) => {
     setCart(prev => prev.map(item => {
-      if (item.id === productId) {
+      if (item.cartItemId === cartItemId) {
         const newQty = Math.max(1, item.quantity + delta);
         return { ...item, quantity: newQty };
       }
@@ -1450,7 +1470,10 @@ const LojaPage = () => {
           price: item.price_cents,
           quantity: item.quantity,
           type: item.type,
-          is_subscription_activator: item.is_subscription_activator
+          is_subscription_activator: item.is_subscription_activator,
+          variant_id: item.variant?.id || null,
+          variant_name: item.variant?.name || null,
+          sku: item.sku
         }))
       };
 
@@ -1467,11 +1490,21 @@ const LojaPage = () => {
       for (const item of cart) {
         // Update Stock for physical products
         if (item.type === 'fisico') {
-          const { error: stockError } = await supabase.rpc('decrement_product_stock', {
-            product_id: item.id,
-            quantity: item.quantity
-          });
-          if (stockError) console.error(`Error updating stock for ${item.name}:`, stockError);
+          if (item.variant?.id) {
+            // Update variant stock
+            const { error: stockError } = await supabase.rpc('decrement_product_variant_stock', {
+              variant_id: item.variant.id,
+              quantity: item.quantity
+            });
+            if (stockError) console.error(`Error updating variant stock for ${item.name} (${item.variant.name}):`, stockError);
+          } else {
+            // Update main product stock
+            const { error: stockError } = await supabase.rpc('decrement_product_stock', {
+              product_id: item.id,
+              quantity: item.quantity
+            });
+            if (stockError) console.error(`Error updating stock for ${item.name}:`, stockError);
+          }
         }
 
         // Handle Subscription Activation
@@ -1809,7 +1842,14 @@ const LojaPage = () => {
                         US$ {(product.price_cents / 100).toFixed(2)}
                       </span>
                       <button 
-                        onClick={() => addToCart(product)}
+                        onClick={() => {
+                          if (product.product_variants?.length > 0) {
+                            setSelectedProductForDetails(product);
+                            setSelectedVariant(null);
+                          } else {
+                            addToCart(product);
+                          }
+                        }}
                         className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
                       >
                         <Plus className="w-6 h-6" />
@@ -1817,10 +1857,17 @@ const LojaPage = () => {
                     </div>
                     
                     <button 
-                      onClick={() => addToCart(product)}
+                      onClick={() => {
+                        if (product.product_variants?.length > 0) {
+                          setSelectedProductForDetails(product);
+                          setSelectedVariant(null);
+                        } else {
+                          addToCart(product);
+                        }
+                      }}
                       className="w-full py-4 bg-gray-50 text-secondary rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#FFD700] hover:text-secondary transition-all"
                     >
-                      Quero para meu filho
+                      {product.product_variants?.length > 0 ? 'Ver Opções' : 'Quero para meu filho'}
                     </button>
                   </div>
                 </motion.div>
@@ -1883,23 +1930,27 @@ const LojaPage = () => {
                       </div>
                     ) : (
                       cart.map((item) => (
-                        <div key={item.id} className="flex gap-4 p-4 bg-gray-50 rounded-3xl group">
+                        <div key={item.cartItemId} className="flex gap-4 p-4 bg-gray-50 rounded-3xl group">
                           <div className="w-20 h-20 rounded-2xl overflow-hidden flex-shrink-0">
                             <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="font-black text-secondary text-sm truncate">{item.name}</h4>
-                            <p className="text-primary font-black text-sm">US$ {(item.price_cents / 100).toFixed(2)}</p>
+                            {item.variant && (
+                              <p className="text-[10px] font-black text-primary uppercase tracking-widest">{item.variant.name}</p>
+                            )}
+                            <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">SKU: {item.sku}</p>
+                            <p className="text-primary font-black text-sm mt-1">US$ {(item.price_cents / 100).toFixed(2)}</p>
                             <div className="flex items-center gap-3 mt-2">
                               <button 
-                                onClick={() => updateQuantity(item.id, -1)}
+                                onClick={() => updateQuantity(item.cartItemId, -1)}
                                 className="w-6 h-6 bg-white rounded-lg flex items-center justify-center text-secondary hover:bg-primary hover:text-white transition-all shadow-sm"
                               >
                                 <Minus className="w-3 h-3" />
                               </button>
                               <span className="text-xs font-black text-secondary w-4 text-center">{item.quantity}</span>
                               <button 
-                                onClick={() => updateQuantity(item.id, 1)}
+                                onClick={() => updateQuantity(item.cartItemId, 1)}
                                 className="w-6 h-6 bg-white rounded-lg flex items-center justify-center text-secondary hover:bg-primary hover:text-white transition-all shadow-sm"
                               >
                                 <Plus className="w-3 h-3" />
@@ -1907,7 +1958,7 @@ const LojaPage = () => {
                             </div>
                           </div>
                           <button 
-                            onClick={() => removeFromCart(item.id)}
+                            onClick={() => removeFromCart(item.cartItemId)}
                             className="text-secondary/20 hover:text-red-500 transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -2134,6 +2185,119 @@ const LojaPage = () => {
                   )}
                 </div>
               )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Product Details Modal (Variants) */}
+      <AnimatePresence>
+        {selectedProductForDetails && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedProductForDetails(null)}
+              className="fixed inset-0 bg-secondary/60 backdrop-blur-sm z-[200]"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl bg-white z-[201] rounded-[48px] overflow-hidden shadow-2xl"
+            >
+              <div className="flex flex-col md:flex-row h-full max-h-[90vh] overflow-y-auto md:overflow-hidden">
+                <div className="md:w-1/2 h-64 md:h-auto relative bg-gray-50">
+                  <img 
+                    src={selectedProductForDetails.image_url} 
+                    alt={selectedProductForDetails.name} 
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  <button 
+                    onClick={() => setSelectedProductForDetails(null)}
+                    className="absolute top-6 left-6 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-secondary hover:text-primary transition-all shadow-lg md:hidden"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="md:w-1/2 p-10 flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+                          {selectedProductForDetails.store_categories?.name || 'Geral'}
+                        </span>
+                        <h3 className="text-3xl font-black text-secondary tracking-tighter leading-tight">{selectedProductForDetails.name}</h3>
+                      </div>
+                      <button 
+                        onClick={() => setSelectedProductForDetails(null)}
+                        className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-secondary hover:bg-primary hover:text-white transition-all hidden md:flex"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    
+                    <p className="text-sm text-secondary/60 font-medium leading-relaxed mb-8">
+                      {selectedProductForDetails.description || 'Um produto exclusivo Phaleduc para o desenvolvimento bilíngue do seu filho.'}
+                    </p>
+
+                    {selectedProductForDetails.product_variants?.length > 0 && (
+                      <div className="space-y-4 mb-8">
+                        <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-2">Selecione a Variante</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          {selectedProductForDetails.product_variants.map((variant: any) => (
+                            <button
+                              key={variant.id}
+                              onClick={() => setSelectedVariant(variant)}
+                              className={cn(
+                                "p-4 rounded-2xl border-2 transition-all text-left group",
+                                selectedVariant?.id === variant.id 
+                                  ? "border-primary bg-primary/5 ring-4 ring-primary/10" 
+                                  : "border-gray-100 hover:border-primary/30"
+                              )}
+                            >
+                              <p className={cn(
+                                "text-xs font-black uppercase tracking-widest mb-1",
+                                selectedVariant?.id === variant.id ? "text-primary" : "text-secondary/40"
+                              )}>
+                                {variant.name}
+                              </p>
+                              <p className="text-[10px] font-bold text-secondary/20 group-hover:text-secondary/40 transition-colors">
+                                SKU: {variant.sku}
+                              </p>
+                              {variant.stock_quantity <= 5 && variant.stock_quantity > 0 && (
+                                <p className="text-[8px] font-black text-orange-500 uppercase mt-1">Últimas unidades!</p>
+                              )}
+                              {variant.stock_quantity === 0 && (
+                                <p className="text-[8px] font-black text-red-500 uppercase mt-1">Esgotado</p>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-3xl font-black text-secondary">
+                        US$ {(selectedProductForDetails.price_cents / 100).toFixed(2)}
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => addToCart(selectedProductForDetails, selectedVariant)}
+                      disabled={selectedProductForDetails.product_variants?.length > 0 && !selectedVariant}
+                      className="w-full py-6 bg-primary text-white rounded-3xl font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-primary/20 disabled:opacity-50 disabled:hover:scale-100"
+                    >
+                      {selectedProductForDetails.product_variants?.length > 0 && !selectedVariant 
+                        ? 'Selecione uma opção' 
+                        : 'Adicionar à Mochila'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           </>
         )}
@@ -3561,6 +3725,81 @@ const AlunosPaisPage = () => {
   const [loginMode, setLoginMode] = useState<'parent' | 'student'>('parent');
   const [subscription, setSubscription] = useState<any>(null);
   const [checkingSubscription, setCheckingSubscription] = useState(false);
+  const [activeParentTab, setActiveParentTab] = useState<'dashboard' | 'orders'>('dashboard');
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+
+  const fetchOrders = async (userId: string) => {
+    setLoadingOrders(true);
+    try {
+      const { data, error } = await supabase
+        .from('store_orders')
+        .select('*')
+        .eq('parent_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setOrders(data || []);
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  const handleCreatePortalSession = async () => {
+    if (!familyData?.stripe_customer_id) {
+      toast.error('Nenhuma assinatura ativa encontrada para gerenciar.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/create-portal-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId: familyData.stripe_customer_id }),
+      });
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error(data.error || 'Erro ao criar sessão do portal');
+      }
+    } catch (err: any) {
+      console.error('Portal error:', err);
+      toast.error('Erro ao acessar o portal do cliente.');
+    }
+  };
+
+  const logAuditAction = async (action: string, details: any) => {
+    try {
+      await supabase.from('audit_logs').insert([{
+        user_id: user?.id,
+        action,
+        details
+      }]);
+    } catch (err) {
+      console.error('Audit log error:', err);
+    }
+  };
+
+  const handleDownloadInvoice = async (order: any) => {
+    toast.info('Gerando fatura comercial (Invoice)...');
+    await logAuditAction('invoice_download_attempt', { orderId: order.id });
+    
+    // Simulação de download de invoice
+    setTimeout(() => {
+      toast.success('Invoice gerada com sucesso! O download começará em instantes.');
+      logAuditAction('invoice_download_success', { orderId: order.id });
+    }, 1500);
+  };
+
+  useEffect(() => {
+    if (view === 'parent' && user?.id) {
+      fetchOrders(user.id);
+    }
+  }, [view, user?.id]);
 
   // Set initial active child when profiles are loaded
   useEffect(() => {
@@ -4598,14 +4837,42 @@ const AlunosPaisPage = () => {
                   <Unlock className="w-4 h-4" /> Modo Família Ativo
                 </div>
                 <h2 className="text-4xl md:text-5xl font-black text-secondary tracking-tighter">Painel de Acompanhamento</h2>
-                <button 
-                  onClick={() => setShowPasswordChange(!showPasswordChange)}
-                  className="mt-4 flex items-center gap-2 text-[10px] font-black text-secondary/40 hover:text-primary transition-all uppercase tracking-widest"
-                >
-                  <Settings className="w-4 h-4" /> Configurações de Segurança
-                </button>
+                <div className="flex items-center gap-6 mt-6">
+                  <button 
+                    onClick={() => setActiveParentTab('dashboard')}
+                    className={cn(
+                      "text-xs font-black uppercase tracking-widest transition-all pb-2 border-b-2",
+                      activeParentTab === 'dashboard' ? "text-primary border-primary" : "text-secondary/40 border-transparent hover:text-secondary"
+                    )}
+                  >
+                    Dashboard
+                  </button>
+                  <button 
+                    onClick={() => setActiveParentTab('orders')}
+                    className={cn(
+                      "text-xs font-black uppercase tracking-widest transition-all pb-2 border-b-2",
+                      activeParentTab === 'orders' ? "text-primary border-primary" : "text-secondary/40 border-transparent hover:text-secondary"
+                    )}
+                  >
+                    Meus Pedidos
+                  </button>
+                  <button 
+                    onClick={() => setShowPasswordChange(!showPasswordChange)}
+                    className="flex items-center gap-2 text-[10px] font-black text-secondary/40 hover:text-primary transition-all uppercase tracking-widest pb-2"
+                  >
+                    <Settings className="w-4 h-4" /> Segurança
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
+                {subscription && (
+                  <button 
+                    onClick={handleCreatePortalSession}
+                    className="px-6 py-4 bg-indigo-50 text-indigo-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-100 transition-all flex items-center gap-2"
+                  >
+                    <CreditCard className="w-4 h-4" /> Gerenciar Assinatura
+                  </button>
+                )}
                 <button 
                   onClick={() => setView('materials')}
                   className="px-8 py-4 bg-primary/10 text-primary rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary/20 transition-all flex items-center gap-2"
@@ -4674,7 +4941,8 @@ const AlunosPaisPage = () => {
               )}
             </AnimatePresence>
 
-            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-12">
+            {activeParentTab === 'dashboard' ? (
+              <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-12">
               {/* Children List with Access Codes */}
               <div className="lg:col-span-3 bg-gray-50 rounded-[40px] p-8 md:p-12">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
@@ -4948,6 +5216,120 @@ const AlunosPaisPage = () => {
                 </div>
               </div>
             </div>
+            ) : (
+              <div className="max-w-7xl mx-auto">
+                <div className="bg-gray-50 rounded-[40px] p-8 md:p-12">
+                  <div className="flex items-center gap-4 mb-10">
+                    <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+                      <ShoppingBag className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-secondary tracking-tight">Histórico de Pedidos</h3>
+                      <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Acompanhe suas compras e faturas</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    {loadingOrders ? (
+                      <div className="flex justify-center py-20">
+                        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                      </div>
+                    ) : orders.length === 0 ? (
+                      <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
+                        <Package className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                        <p className="text-secondary/40 font-bold">Você ainda não realizou nenhum pedido.</p>
+                        <button 
+                          onClick={() => navigate('/loja')}
+                          className="mt-4 text-primary font-black uppercase tracking-widest text-xs hover:underline"
+                        >
+                          Visitar a Loja Phaleduc
+                        </button>
+                      </div>
+                    ) : (
+                      orders.map((order) => (
+                        <div key={order.id} className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm hover:shadow-md transition-all">
+                          <div className="flex flex-col lg:flex-row justify-between gap-8">
+                            <div className="space-y-4">
+                              <div className="flex items-center gap-3">
+                                <span className={cn(
+                                  "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest",
+                                  order.status === 'pago' ? "bg-success/10 text-success" :
+                                  order.status === 'Processing' ? "bg-primary/10 text-primary" :
+                                  order.status === 'Shipped' ? "bg-indigo-50 text-indigo-600" :
+                                  order.status === 'Delivered' ? "bg-emerald-50 text-emerald-600" :
+                                  "bg-gray-100 text-gray-500"
+                                )}>
+                                  {order.status === 'pago' ? 'Confirmado' : 
+                                   order.status === 'Processing' ? 'Processando' :
+                                   order.status === 'Shipped' ? 'Enviado' :
+                                   order.status === 'Delivered' ? 'Entregue' : order.status}
+                                </span>
+                                <span className="text-[10px] font-black text-secondary/20 uppercase tracking-widest">
+                                  #{order.id.slice(0, 8).toUpperCase()}
+                                </span>
+                              </div>
+                              <h4 className="text-xl font-black text-secondary">
+                                Pedido de {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                              </h4>
+                              <div className="flex flex-wrap gap-4">
+                                <div className="flex items-center gap-2 text-xs font-bold text-secondary/60">
+                                  <Package className="w-4 h-4" />
+                                  {order.items?.length || 0} Itens
+                                </div>
+                                <div className="flex items-center gap-2 text-xs font-bold text-secondary/60">
+                                  <CreditCard className="w-4 h-4" />
+                                  US$ {(order.total_amount_cents / 100).toFixed(2)}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-4">
+                              {order.tracking_number && (
+                                <a 
+                                  href={`https://www.17track.net/en/track?nums=${order.tracking_number}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all"
+                                >
+                                  <Truck className="w-4 h-4" /> Rastrear Pedido
+                                </a>
+                              )}
+                              <button 
+                                onClick={() => handleDownloadInvoice(order)}
+                                className="flex items-center gap-2 px-6 py-3 bg-gray-50 text-secondary rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-gray-100 transition-all"
+                              >
+                                <FileText className="w-4 h-4" /> Download Invoice
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mt-8 pt-8 border-t border-gray-50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {order.items?.map((item: any, idx: number) => (
+                              <div key={idx} className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center text-secondary/40 font-black text-xs">
+                                  {item.quantity}x
+                                </div>
+                                <div>
+                                  <p className="text-sm font-black text-secondary truncate max-w-[150px]">
+                                    {item.name}
+                                    {item.variant_name && (
+                                      <span className="text-primary ml-1">({item.variant_name})</span>
+                                    )}
+                                  </p>
+                                  <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">
+                                    {item.sku ? `SKU: ${item.sku}` : (item.type === 'fisico' ? 'Produto Físico' : 'Assinatura')}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
