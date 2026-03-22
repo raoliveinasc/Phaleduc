@@ -508,8 +508,21 @@ async function startServer() {
     }
   }
 
+  // API Route: Health Check
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', time: new Date().toISOString() });
+  });
+
   // API Route: Test SMTP Configuration
   app.post('/api/test-smtp', async (req, res) => {
+    console.log('Received SMTP test request for:', req.body.testEmail);
+    console.log('Current SMTP Config:', {
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      user: process.env.SMTP_USER,
+      fromName: process.env.SMTP_FROM_NAME,
+      fromEmail: process.env.SMTP_FROM_EMAIL
+    });
     const { testEmail } = req.body;
 
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
@@ -525,11 +538,23 @@ async function startServer() {
     };
 
     try {
-      await transporter.sendMail(mailOptions);
-      res.json({ success: true });
+      console.log('Verifying SMTP connection...');
+      await transporter.verify();
+      console.log('SMTP connection verified successfully.');
+
+      console.log('Attempting to send test email...');
+      const info = await transporter.sendMail(mailOptions);
+      console.log('Test email sent successfully:', info.messageId);
+      res.json({ success: true, messageId: info.messageId });
     } catch (error: any) {
-      console.error('SMTP Test Error:', error);
-      res.status(500).json({ error: error.message });
+      console.error('SMTP Test Error Details:', error);
+      res.status(500).json({ 
+        error: error.message, 
+        code: error.code,
+        command: error.command,
+        response: error.response,
+        responseCode: error.responseCode
+      });
     }
   });
 
