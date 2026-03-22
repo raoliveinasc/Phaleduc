@@ -313,17 +313,29 @@ export const AdminLoja = () => {
     setIsTestingSmtp(true);
     try {
       // 1. Health Check
+      console.log('Starting health check...');
       const healthResponse = await fetch('/api/health');
       if (!healthResponse.ok) {
-        throw new Error('Servidor indisponível (Health Check falhou)');
+        const healthText = await healthResponse.text();
+        console.error('Health check failed:', healthResponse.status, healthText);
+        throw new Error(`Servidor indisponível (Status: ${healthResponse.status})`);
       }
+      console.log('Health check passed.');
 
       // 2. SMTP Test
+      console.log('Starting SMTP test...');
       const response = await fetch('/api/test-smtp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ testEmail }),
       });
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response received:', response.status, text);
+        throw new Error(`O servidor retornou uma resposta inválida (Status: ${response.status}). Verifique os logs do servidor.`);
+      }
 
       const data = await response.json();
       if (response.ok) {
@@ -335,12 +347,12 @@ export const AdminLoja = () => {
         const responseCode = data.responseCode ? ` (Status: ${data.responseCode})` : '';
         
         toast.error(`Erro no teste SMTP: ${errorMsg}${errorCode}${responseCode}${responseMsg}`, {
-          duration: 10000 // Show for longer
+          duration: 10000
         });
       }
     } catch (error: any) {
-      console.error('SMTP Test Error:', error);
-      toast.error(`Erro ao conectar com o servidor: ${error.message || 'Erro de rede'}`);
+      console.error('Detailed SMTP Test Error:', error);
+      toast.error(`Erro: ${error.message || 'Erro de rede'}`);
     } finally {
       setIsTestingSmtp(false);
     }

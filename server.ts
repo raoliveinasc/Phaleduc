@@ -23,24 +23,25 @@ const stripe = new Stripe(stripeSecretKey, {
   apiVersion: '2026-02-25.clover' as any,
 });
 
-// Initialize Nodemailer for SiteGround SMTP
-const smtpPort = parseInt(process.env.SMTP_PORT || '465');
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: smtpPort,
-  secure: smtpPort === 465, // true for 465, false for other ports (like 587)
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false // Helps with shared hosting certificate issues
-  }
-});
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Initialize Nodemailer for SiteGround SMTP
+  const smtpPort = parseInt(process.env.SMTP_PORT || '465');
+  console.log('Initializing SMTP Transporter with port:', smtpPort);
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: smtpPort,
+    secure: smtpPort === 465, // true for 465, false for other ports (like 587)
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    tls: {
+      rejectUnauthorized: false // Helps with shared hosting certificate issues
+    }
+  });
 
   // Middleware for Stripe Webhook (needs raw body)
   app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -166,10 +167,12 @@ async function startServer() {
         `,
       };
 
+      console.log('Sending order confirmation email...');
       await transporter.sendMail(mailOptions);
+      console.log('Order confirmation email sent successfully.');
       res.json({ success: true });
     } catch (error: any) {
-      console.error('Error sending email:', error);
+      console.error('Error sending confirmation email:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -267,11 +270,17 @@ async function startServer() {
     };
 
     try {
+      console.log('Sending status update email...');
       await transporter.sendMail(mailOptions);
+      console.log('Status update email sent successfully.');
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error sending status update email:', error);
-      res.status(500).json({ error: 'Failed to send status update email: ' + error.message });
+      res.status(500).json({ 
+        error: 'Failed to send status update email: ' + error.message,
+        code: error.code,
+        response: error.response
+      });
     }
   });
 
