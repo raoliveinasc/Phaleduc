@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { 
   BrowserRouter as Router, 
   Routes, 
@@ -78,7 +78,8 @@ import {
   Trash2,
   RefreshCw,
   Loader2,
-  Minus
+  Minus,
+  AlertCircle
 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -130,6 +131,63 @@ const GALLERY_IMAGES = [
 ];
 
 // --- Components ---
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-8 font-display">
+          <div className="max-w-md w-full text-center space-y-8">
+            <div className="w-24 h-24 bg-rose-100 text-rose-500 rounded-full flex items-center justify-center mx-auto">
+              <AlertCircle className="w-12 h-12" />
+            </div>
+            <div className="space-y-4">
+              <h1 className="text-4xl font-black text-secondary tracking-tight">Ops! Algo deu errado.</h1>
+              <p className="text-secondary/60 font-medium">
+                Ocorreu um erro inesperado no aplicativo. Por favor, tente recarregar a página.
+              </p>
+              {this.state.error && (
+                <div className="p-4 bg-gray-50 rounded-2xl text-left text-xs font-mono text-rose-600 overflow-auto max-h-40">
+                  {this.state.error.toString()}
+                </div>
+              )}
+            </div>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-4 bg-primary text-white font-black rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20"
+            >
+              Recarregar Página
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const SupabaseStatus = () => {
   const [status, setStatus] = useState<'loading' | 'connected' | 'error'>('loading');
@@ -1277,6 +1335,7 @@ const LojaPage = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
   const productsRef = useRef<HTMLDivElement>(null);
 
   const scrollToProducts = () => {
@@ -1413,33 +1472,7 @@ const LojaPage = () => {
 
     setIsSubmitting(true);
     try {
-      // 1. Create Payment Intent on our server
-      const response = await fetch('/api/create-payment-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: finalTotal, // cents
-          currency: 'usd',
-          customerEmail: customerInfo.email
-        }),
-      });
-
-      const data = await response.json();
-      if (data.error) throw new Error(data.error);
-      
-      setClientSecret(data.clientSecret);
-      setCheckoutStep('payment' as any); // New step for payment
-    } catch (error: any) {
-      console.error('Error initiating checkout:', error);
-      toast.error(error.message || 'Erro ao iniciar checkout.');
-      setIsSubmitting(false);
-    }
-  };
-
-  const finalizeOrder = async (paymentIntentId?: string) => {
-    setIsSubmitting(true);
-    try {
-      // 1. Try to find parent_id by email
+      // 1. Create Pending Order first to get a real ID
       const { data: parent } = await supabase
         .from('pais')
         .select('id')
@@ -1459,8 +1492,7 @@ const LojaPage = () => {
         shipping_cost_cents: shippingCost,
         tax_amount_cents: taxAmount,
         currency: 'USD',
-        status: 'pago', // Now it's paid
-        stripe_payment_intent_id: paymentIntentId,
+        status: 'pendente',
         terms_accepted: customerInfo.termsAccepted,
         privacy_accepted: customerInfo.privacyAccepted,
         parent_id: parent?.id || null,
@@ -1477,7 +1509,6 @@ const LojaPage = () => {
         }))
       };
 
-      // 2. Insert Order
       const { data: newOrder, error: orderError } = await supabase
         .from('store_orders')
         .insert([orderData])
@@ -1485,83 +1516,55 @@ const LojaPage = () => {
         .single();
       
       if (orderError) throw orderError;
+      setCurrentOrderId(newOrder.id);
 
-      // 3. Process each item (Stock & Subscriptions)
-      for (const item of cart) {
-        // Update Stock for physical products
-        if (item.type === 'fisico') {
-          if (item.variant?.id) {
-            // Update variant stock
-            const { error: stockError } = await supabase.rpc('decrement_product_variant_stock', {
-              variant_id: item.variant.id,
-              quantity: item.quantity
-            });
-            if (stockError) console.error(`Error updating variant stock for ${item.name} (${item.variant.name}):`, stockError);
-          } else {
-            // Update main product stock
-            const { error: stockError } = await supabase.rpc('decrement_product_stock', {
-              product_id: item.id,
-              quantity: item.quantity
-            });
-            if (stockError) console.error(`Error updating stock for ${item.name}:`, stockError);
-          }
-        }
+      // 2. Create Payment Intent on our server
+      const response = await fetch('/api/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: cart.map(i => ({ id: i.id, quantity: i.quantity })),
+          country: customerInfo.country,
+          customerEmail: customerInfo.email,
+          orderId: newOrder.id
+        }),
+      });
 
-        // Handle Subscription Activation
-        if (item.is_subscription_activator && parent?.id) {
-          const planType = item.name.toLowerCase().includes('anual') ? 'anual' : 
-                          item.name.toLowerCase().includes('semestral') ? 'semestral' : 'mensal';
-          
-          const durationDays = planType === 'anual' ? 365 : planType === 'semestral' ? 180 : 30;
-          const expiration = new Date();
-          expiration.setDate(expiration.getDate() + durationDays);
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      
+      setClientSecret(data.clientSecret);
+      setCheckoutStep('payment' as any);
+    } catch (error: any) {
+      console.error('Error initiating checkout:', error);
+      toast.error(error.message || 'Erro ao iniciar checkout.');
+      setIsSubmitting(false);
+    }
+  };
 
-          await supabase.from('subscriptions').upsert({
-            user_id: parent.id,
-            plan_type: planType,
-            status: 'active',
-            current_period_start: new Date().toISOString(),
-            current_period_end: expiration.toISOString(),
-            stripe_customer_id: 'store_purchase'
-          }, { onConflict: 'user_id' });
-        }
+  const finalizeOrder = async (paymentIntentId?: string) => {
+    setIsSubmitting(true);
+    try {
+      if (!currentOrderId) throw new Error('Order ID not found');
+
+      // If simulated, we call the simulation endpoint to trigger fulfillment
+      if (paymentIntentId?.startsWith('pi_simulated')) {
+        const res = await fetch('/api/simulate-payment-success', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: currentOrderId, paymentIntentId })
+        });
+        if (!res.ok) throw new Error('Failed to simulate fulfillment');
       }
 
+      // The server (webhook or simulation) handles the heavy lifting.
+      // We just show success here.
       setCheckoutStep('success');
       setCart([]);
       toast.success('Pagamento confirmado e pedido realizado!');
-
-      // 4. Send Confirmation Email
-      try {
-        const emailRes = await fetch('/api/send-order-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            order: orderData,
-            customerEmail: customerInfo.email,
-            customerName: customerInfo.name
-          })
-        });
-
-        if (emailRes.ok) {
-          // Mark as sent in DB
-          await supabase
-            .from('store_orders')
-            .update({ 
-              confirmation_email_sent: true,
-              confirmation_email_at: new Date().toISOString()
-            })
-            .eq('id', newOrder.id);
-          
-          logAuditAction('order_confirmation_email_sent', { orderId: newOrder.id });
-        }
-      } catch (emailError) {
-        console.error('Error triggering confirmation email:', emailError);
-        logAuditAction('order_confirmation_email_failed', { orderId: newOrder.id, error: emailError });
-      }
     } catch (error) {
       console.error('Error finalizing order:', error);
-      toast.error('Erro ao finalizar pedido. O pagamento foi processado, entre em contato com o suporte.');
+      toast.error('Erro ao finalizar pedido. Por favor, verifique seu e-mail para confirmação.');
     } finally {
       setIsSubmitting(false);
     }
@@ -7575,9 +7578,11 @@ const ScrollToTop = () => {
 
 export default function App() {
   return (
-    <Router>
-      <AppContent />
-    </Router>
+    <ErrorBoundary>
+      <Router>
+        <AppContent />
+      </Router>
+    </ErrorBoundary>
   );
 }
 

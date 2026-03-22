@@ -49,7 +49,8 @@ import {
   Gamepad2,
   Sparkles,
   ShoppingBag,
-  CreditCard
+  CreditCard,
+  Lock
 } from 'lucide-react';
 import { AdminLoja } from './AdminLoja';
 import { AdminAssinaturas } from './AdminAssinaturas';
@@ -57,6 +58,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { toast } from 'sonner';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -124,21 +126,47 @@ const AdminSidebar = () => {
 };
 
 const AdminDashboard = () => {
-  const [stats, setStats] = useState({ pais: 0, alunos: 0, tutores: 0, turmas: 0, biblioteca: 0, assinaturas: 0 });
+  const [stats, setStats] = useState({ 
+    pais: 0, 
+    alunos: 0, 
+    tutores: 0, 
+    turmas: 0, 
+    biblioteca: 0, 
+    assinaturas: 0,
+    totalSales: 0,
+    pendingOrders: 0
+  });
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [paisCount, alunosCount, tutoresCount, turmasCount, bibliotecaCount, assinaturasCount] = await Promise.all([
+        const [
+          paisCount, 
+          alunosCount, 
+          tutoresCount, 
+          turmasCount, 
+          bibliotecaCount, 
+          assinaturasCount,
+          ordersRes
+        ] = await Promise.all([
           supabase.from('pais').select('*', { count: 'exact', head: true }),
           supabase.from('alunos').select('*', { count: 'exact', head: true }),
           supabase.from('tutores').select('*', { count: 'exact', head: true }),
           supabase.from('turmas').select('*', { count: 'exact', head: true }),
           supabase.from('biblioteca_recursos').select('*', { count: 'exact', head: true }),
           supabase.from('subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+          supabase.from('store_orders').select('total_amount_cents, status')
         ]);
+
+        const totalSales = (ordersRes.data || [])
+          .filter(o => o.status === 'pago')
+          .reduce((acc, o) => acc + (o.total_amount_cents || 0), 0);
+        
+        const pendingOrders = (ordersRes.data || [])
+          .filter(o => o.status === 'pendente')
+          .length;
 
         setStats({
           pais: paisCount.count || 0,
@@ -147,6 +175,8 @@ const AdminDashboard = () => {
           turmas: turmasCount.count || 0,
           biblioteca: bibliotecaCount.count || 0,
           assinaturas: assinaturasCount.count || 0,
+          totalSales: totalSales / 100,
+          pendingOrders
         });
       } catch (err) {
         console.error('Error fetching stats:', err);
@@ -158,12 +188,12 @@ const AdminDashboard = () => {
   }, []);
 
   const cards = [
-    { name: 'Turmas Ativas', value: stats.turmas, icon: Layout, color: 'bg-indigo-500', path: '/admin/turmas' },
-    { name: 'Recursos na Biblioteca', value: stats.biblioteca, icon: Library, color: 'bg-emerald-500', path: '/admin/biblioteca' },
+    { name: 'Vendas Totais', value: `US$ ${stats.totalSales.toFixed(2)}`, icon: CreditCard, color: 'bg-emerald-600', path: '/admin/loja' },
+    { name: 'Pedidos Pendentes', value: stats.pendingOrders, icon: ShoppingBag, color: 'bg-amber-500', path: '/admin/loja' },
     { name: 'Assinaturas Ativas', value: stats.assinaturas, icon: CreditCard, color: 'bg-rose-500', path: '/admin/assinaturas' },
+    { name: 'Turmas Ativas', value: stats.turmas, icon: Layout, color: 'bg-indigo-500', path: '/admin/turmas' },
     { name: 'Pais Cadastrados', value: stats.pais, icon: Users, color: 'bg-blue-500', path: '/admin/pais' },
     { name: 'Alunos Ativos', value: stats.alunos, icon: Backpack, color: 'bg-primary', path: '/admin/alunos' },
-    { name: 'Tutores Certificados', value: stats.tutores, icon: GraduationCap, color: 'bg-orange-500', path: '/admin/tutores' },
   ];
 
   return (
@@ -206,6 +236,55 @@ const AdminDashboard = () => {
               <CreditCard className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
               <span className="font-bold text-secondary text-sm">Assinaturas</span>
             </Link>
+            <button 
+              onClick={async () => {
+                const confirm = window.confirm("Isso irá adicionar produtos e categorias de teste à sua loja. Deseja continuar?");
+                if (!confirm) return;
+                
+                try {
+                  // 1. Create Category
+                  const { data: cat, error: catErr } = await supabase.from('store_categories').insert([{ name: 'Educação', slug: 'educacao' }]).select().single();
+                  if (catErr) throw catErr;
+
+                  // 2. Create Products
+                  const products = [
+                    {
+                      name: 'Mochila Phaleduc Pro',
+                      description: 'A mochila oficial dos nossos pequenos heróis bilíngues.',
+                      price_cents: 4500,
+                      category_id: cat.id,
+                      type: 'fisico',
+                      stock_quantity: 50,
+                      image_url: 'https://picsum.photos/seed/backpack/800/800',
+                      is_featured: true
+                    },
+                    {
+                      name: 'Plano Anual Phaleduc',
+                      description: 'Acesso completo por 1 ano à nossa plataforma.',
+                      price_cents: 19900,
+                      category_id: cat.id,
+                      type: 'digital',
+                      is_subscription_activator: true,
+                      image_url: 'https://picsum.photos/seed/plan/800/800',
+                      is_featured: true
+                    }
+                  ];
+
+                  const { error: prodErr } = await supabase.from('store_products').insert(products);
+                  if (prodErr) throw prodErr;
+
+                  toast.success('Dados de teste criados com sucesso!');
+                  window.location.reload();
+                } catch (err: any) {
+                  console.error('Error seeding data:', err);
+                  toast.error('Erro ao criar dados: ' + err.message);
+                }
+              }}
+              className="p-6 bg-gray-50 rounded-3xl flex flex-col items-center text-center gap-3 hover:bg-primary/5 transition-all group col-span-2"
+            >
+              <Sparkles className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
+              <span className="font-bold text-secondary text-sm">Popular Loja com Dados de Teste</span>
+            </button>
           </div>
         </div>
         
