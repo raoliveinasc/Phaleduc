@@ -24,14 +24,18 @@ const stripe = new Stripe(stripeSecretKey, {
 });
 
 // Initialize Nodemailer for SiteGround SMTP
+const smtpPort = parseInt(process.env.SMTP_PORT || '465');
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '465'),
-  secure: true, // true for 465, false for other ports
+  port: smtpPort,
+  secure: smtpPort === 465, // true for 465, false for other ports (like 587)
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  tls: {
+    rejectUnauthorized: false // Helps with shared hosting certificate issues
+  }
 });
 
 async function startServer() {
@@ -508,8 +512,8 @@ async function startServer() {
   app.post('/api/test-smtp', async (req, res) => {
     const { testEmail } = req.body;
 
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      return res.status(400).json({ error: 'SMTP credentials are not configured in environment variables.' });
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      return res.status(400).json({ error: 'Configuração SMTP incompleta (HOST, USER ou PASS faltando).' });
     }
 
     const mailOptions = {
