@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS pais (
     senha_temporaria TEXT,
     convite_enviado_em TIMESTAMP WITH TIME ZONE,
     parent_pin TEXT DEFAULT '0000',
+    status TEXT DEFAULT 'ativo',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -235,6 +236,10 @@ CREATE TABLE IF NOT EXISTS store_products (
     stripe_price_id TEXT,
     rating DECIMAL(3,2) DEFAULT 5.0,
     is_featured BOOLEAN DEFAULT FALSE,
+    weight_grams INTEGER DEFAULT 0,
+    length_mm INTEGER DEFAULT 0,
+    width_mm INTEGER DEFAULT 0,
+    height_mm INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -245,10 +250,22 @@ CREATE TABLE IF NOT EXISTS store_orders (
     customer_email TEXT NOT NULL,
     parent_id UUID REFERENCES pais(id) ON DELETE SET NULL ON UPDATE CASCADE,
     total_amount_cents INTEGER NOT NULL,
+    shipping_cost_cents INTEGER DEFAULT 0,
+    tax_amount_cents INTEGER DEFAULT 0,
+    currency TEXT DEFAULT 'USD',
     status TEXT DEFAULT 'pendente', -- 'pendente', 'pago', 'cancelado', 'enviado', 'entregue'
     items JSONB NOT NULL, -- Lista de produtos no pedido
-    shipping_address TEXT,
+    country TEXT,
+    address_line1 TEXT,
+    address_line2 TEXT,
+    city TEXT,
+    state_province TEXT,
+    postal_code TEXT,
+    shipping_address TEXT, -- Deprecated, using individual fields now
     payment_id TEXT, -- ID do Stripe ou outro processador
+    tracking_number TEXT,
+    terms_accepted BOOLEAN DEFAULT FALSE,
+    privacy_accepted BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

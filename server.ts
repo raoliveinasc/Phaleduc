@@ -119,6 +119,7 @@ async function startServer() {
         html: `
           <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 16px; overflow: hidden;">
             <div style="background-color: #1a1a1a; padding: 40px; text-align: center;">
+              <img src="cid:logo" alt="Phaleduc Logo" style="max-width: 150px; margin-bottom: 20px;">
               <h1 style="color: #ffffff; margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px;">Phaleduc</h1>
               <p style="color: #ffffff; opacity: 0.6; margin-top: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Educação Bilíngue de Herança</p>
             </div>
@@ -149,12 +150,28 @@ async function startServer() {
               <div style="margin-top: 40px; text-align: center;">
                 <a href="${req.headers.origin}/alunos-pais" style="background-color: #FFD700; color: #1a1a1a; padding: 16px 32px; border-radius: 12px; text-decoration: none; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Acompanhar Pedido</a>
               </div>
+
+              <div style="margin-top: 40px; text-align: center;">
+                <img src="cid:mascot" alt="Mascote Phaleduc" style="max-width: 100px;">
+              </div>
             </div>
             <div style="background-color: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999;">
               &copy; ${new Date().getFullYear()} Phaleduc. Todos os direitos reservados.
             </div>
           </div>
         `,
+        attachments: [
+          {
+            filename: 'logo.png',
+            path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/logo-phaleduc.png',
+            cid: 'logo'
+          },
+          {
+            filename: 'mascote.png',
+            path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/mascote.png',
+            cid: 'mascot'
+          }
+        ]
       };
 
       await transporter.sendMail(mailOptions);
@@ -162,6 +179,101 @@ async function startServer() {
     } catch (error: any) {
       console.error('Error sending email:', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API Route: Send Order Status Update Email
+  app.post('/api/send-order-status-update', async (req, res) => {
+    const { orderId, status, customerEmail, customerName, trackingNumber } = req.body;
+
+    if (!customerEmail) {
+      return res.status(400).json({ error: 'Customer email is required' });
+    }
+
+    let statusTitle = '';
+    let statusMessage = '';
+    let statusColor = '#1a1a1a';
+
+    switch (status) {
+      case 'pago':
+        statusTitle = 'Pagamento Confirmado';
+        statusMessage = 'Seu pagamento foi confirmado com sucesso. Estamos preparando seu pedido!';
+        statusColor = '#10b981';
+        break;
+      case 'enviado':
+        statusTitle = 'Pedido Enviado';
+        statusMessage = `Seu pedido já está a caminho! ${trackingNumber ? `Código de rastreio: ${trackingNumber}` : ''}`;
+        statusColor = '#6366f1';
+        break;
+      case 'entregue':
+        statusTitle = 'Pedido Entregue';
+        statusMessage = 'Seu pedido foi entregue. Esperamos que você e seu filho(a) aproveitem muito!';
+        statusColor = '#059669';
+        break;
+      case 'cancelado':
+        statusTitle = 'Pedido Cancelado';
+        statusMessage = 'Seu pedido foi cancelado. Se você não solicitou isso, entre em contato conosco.';
+        statusColor = '#e11d48';
+        break;
+      default:
+        statusTitle = `Status do Pedido: ${status}`;
+        statusMessage = `O status do seu pedido #${orderId.slice(0, 8)} foi atualizado para: ${status}`;
+    }
+
+    const mailOptions = {
+      from: `"${process.env.SMTP_FROM_NAME || 'Phaleduc Store'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
+      to: customerEmail,
+      subject: `Atualização do Pedido #${orderId.slice(0, 8)}: ${statusTitle}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 16px; overflow: hidden;">
+          <div style="background-color: #1a1a1a; padding: 30px; text-align: center;">
+            <img src="cid:logo" alt="Phaleduc Logo" style="max-width: 120px;">
+          </div>
+          <div style="padding: 40px;">
+            <h2 style="color: ${statusColor}; text-align: center; margin-top: 0;">${statusTitle}</h2>
+            <p>Olá, <strong>${customerName}</strong>,</p>
+            <p style="color: #444; line-height: 1.6;">${statusMessage}</p>
+            
+            ${status === 'enviado' && trackingNumber ? `
+            <div style="background-color: #f9f9f9; padding: 20px; border-radius: 12px; margin: 20px 0; text-align: center; border: 1px solid #eee;">
+              <p style="margin: 0; font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 1px;">Código de Rastreamento</p>
+              <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold; color: #1a1a1a; letter-spacing: 2px;">${trackingNumber}</p>
+            </div>
+            ` : ''}
+
+            <div style="margin-top: 30px; text-align: center;">
+              <a href="${req.headers.origin}/alunos-pais" style="display: inline-block; background-color: #FFD700; color: #1a1a1a; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 14px;">Ver Detalhes do Pedido</a>
+            </div>
+            
+            <div style="margin-top: 40px; text-align: center;">
+              <img src="cid:mascot" alt="Mascote Phaleduc" style="max-width: 80px;">
+            </div>
+          </div>
+          <div style="background-color: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999;">
+            &copy; ${new Date().getFullYear()} Phaleduc. Todos os direitos reservados.
+          </div>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: 'logo.png',
+          path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/logo-phaleduc.png',
+          cid: 'logo'
+        },
+        {
+          filename: 'mascote.png',
+          path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/mascote.png',
+          cid: 'mascot'
+        }
+      ]
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error sending status update email:', error);
+      res.status(500).json({ error: 'Failed to send status update email' });
     }
   });
 
@@ -406,28 +518,45 @@ app.post('/api/send-shipping-email', async (req, res) => {
     to: customerEmail,
     subject: `Seu pedido #${orderId.slice(0, 8)} foi enviado!`,
     html: `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-        <h2 style="color: #FF6321; text-align: center;">Pedido Enviado!</h2>
-        <p>Olá, <strong>${customerName}</strong>,</p>
-        <p>Temos ótimas notícias! Seu pedido <strong>#${orderId.slice(0, 8)}</strong> foi processado e já está a caminho.</p>
-        
-        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 10px; margin: 20px 0; text-align: center;">
-          <p style="margin: 0; font-size: 14px; color: #666;">Código de Rastreamento:</p>
-          <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold; color: #141414; letter-spacing: 2px;">${trackingNumber}</p>
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 16px; overflow: hidden;">
+        <div style="background-color: #1a1a1a; padding: 30px; text-align: center;">
+          <img src="cid:logo" alt="Phaleduc Logo" style="max-width: 120px;">
         </div>
+        <div style="padding: 40px;">
+          <h2 style="color: #FF6321; text-align: center; margin-top: 0;">Pedido Enviado!</h2>
+          <p>Olá, <strong>${customerName}</strong>,</p>
+          <p>Temos ótimas notícias! Seu pedido <strong>#${orderId.slice(0, 8)}</strong> foi processado e já está a caminho.</p>
+          
+          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 12px; margin: 20px 0; text-align: center; border: 1px solid #eee;">
+            <p style="margin: 0; font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 1px;">Código de Rastreamento</p>
+            <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold; color: #1a1a1a; letter-spacing: 2px;">${trackingNumber}</p>
+          </div>
 
-        <p>Você pode acompanhar o status da entrega utilizando o código acima no site da transportadora.</p>
-        
-        <p style="margin-top: 30px;">Se tiver qualquer dúvida, responda a este e-mail ou entre em contato com nosso suporte.</p>
-        
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
-        
-        <p style="font-size: 12px; color: #999; text-align: center;">
-          Phaleduc - Educação e Tecnologia<br>
-          Este é um e-mail automático, por favor não responda diretamente.
-        </p>
+          <p style="color: #666; line-height: 1.6;">Você pode acompanhar o status da entrega utilizando o código acima no site da transportadora.</p>
+          
+          <p style="margin-top: 30px; color: #666;">Se tiver qualquer dúvida, responda a este e-mail ou entre em contato com nosso suporte.</p>
+          
+          <div style="margin-top: 40px; text-align: center;">
+            <img src="cid:mascot" alt="Mascote Phaleduc" style="max-width: 80px;">
+          </div>
+        </div>
+        <div style="background-color: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999;">
+          &copy; ${new Date().getFullYear()} Phaleduc. Todos os direitos reservados.
+        </div>
       </div>
-    `
+    `,
+    attachments: [
+      {
+        filename: 'logo.png',
+        path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/logo-phaleduc.png',
+        cid: 'logo'
+      },
+      {
+        filename: 'mascote.png',
+        path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/mascote.png',
+        cid: 'mascot'
+      }
+    ]
   };
 
   try {

@@ -320,23 +320,22 @@ export const AdminLoja = () => {
       
       toast.success(`Pedido atualizado com sucesso!`);
       
-      // If status is 'enviado' and tracking number is provided, we could trigger another email
-      if (newStatus === 'enviado' && trackingNumber) {
-        try {
-          await fetch('/api/send-shipping-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              orderId,
-              trackingNumber,
-              customerEmail: selectedOrder?.customer_email,
-              customerName: selectedOrder?.customer_name
-            })
-          });
-          toast.success('E-mail de rastreamento enviado!');
-        } catch (emailErr) {
-          console.error('Error sending shipping email:', emailErr);
-        }
+      // Trigger status update email
+      try {
+        await fetch('/api/send-order-status-update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId,
+            status: newStatus,
+            trackingNumber,
+            customerEmail: selectedOrder?.customer_email,
+            customerName: selectedOrder?.customer_name
+          })
+        });
+        toast.success('E-mail de atualização enviado ao cliente!');
+      } catch (emailErr) {
+        console.error('Error sending status update email:', emailErr);
       }
 
       fetchData();

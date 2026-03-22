@@ -1530,6 +1530,11 @@ const LojaPage = () => {
         }),
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Erro ao processar pagamento (${response.status}). Verifique se o servidor está rodando.`);
+      }
+
       const data = await response.json();
       if (data.error) throw new Error(data.error);
       
