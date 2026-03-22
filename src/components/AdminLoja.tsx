@@ -60,6 +60,7 @@ export const AdminLoja = () => {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -305,6 +306,32 @@ export const AdminLoja = () => {
     }
   };
 
+  const handleTestSmtp = async () => {
+    const testEmail = prompt('Digite o e-mail para receber o teste:', '');
+    if (!testEmail) return;
+
+    setIsTestingSmtp(true);
+    try {
+      const response = await fetch('/api/test-smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ testEmail }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        toast.success('E-mail de teste enviado com sucesso! Verifique sua caixa de entrada.');
+      } else {
+        toast.error(`Erro no teste SMTP: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('SMTP Test Error:', error);
+      toast.error('Erro ao conectar com o servidor para teste SMTP.');
+    } finally {
+      setIsTestingSmtp(false);
+    }
+  };
+
   const handleUpdateOrderStatus = async (orderId: string, newStatus: string, trackingNumber?: string) => {
     try {
       const updateData: any = { status: newStatus };
@@ -322,20 +349,43 @@ export const AdminLoja = () => {
       
       // Trigger status update email
       try {
-        await fetch('/api/send-order-status-update', {
+        const currentOrder = orders.find(o => o.id === orderId) || selectedOrder;
+        const emailToUse = currentOrder?.customer_email;
+        const nameToUse = currentOrder?.customer_name;
+
+        if (!emailToUse) {
+          console.warn('⚠️ Cannot send status update email: Customer email not found in order data.');
+          return;
+        }
+
+        const response = await fetch('/api/send-order-status-update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             orderId,
             status: newStatus,
-            trackingNumber,
-            customerEmail: selectedOrder?.customer_email,
-            customerName: selectedOrder?.customer_name
+            trackingNumber: trackingNumber || currentOrder?.tracking_number,
+            customerEmail: emailToUse,
+            customerName: nameToUse || 'Cliente'
           })
         });
-        toast.success('E-mail de atualização enviado ao cliente!');
+        
+        const result = await response.json();
+        
+        if (!response.ok) {
+          console.error('❌ Server error sending status update email:', result.error);
+          toast.error(`Erro ao enviar e-mail: ${result.error || 'Erro desconhecido'}`);
+          return;
+        }
+
+        if (result.simulated) {
+          toast.info('E-mail simulado (SMTP não configurado)', { icon: 'ℹ️' });
+        } else if (result.success) {
+          toast.success('E-mail de atualização enviado ao cliente!');
+        }
       } catch (emailErr) {
         console.error('Error sending status update email:', emailErr);
+        toast.error('Erro de conexão ao enviar e-mail');
       }
 
       fetchData();
@@ -536,19 +586,32 @@ export const AdminLoja = () => {
               </>
             )}
           </h3>
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-secondary/20" />
-            <input 
-              type="text" 
-              placeholder={
-                activeTab === 'produtos' ? "Buscar produtos..." : 
-                activeTab === 'categorias' ? "Buscar categorias..." : 
-                "Buscar pedidos..."
-              }
-              className="pl-12 pr-6 py-3 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all w-full md:w-80 font-bold text-secondary"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="flex items-center gap-4">
+            {activeTab === 'pedidos' && (
+              <button 
+                onClick={handleTestSmtp}
+                disabled={isTestingSmtp}
+                className="px-6 py-3 bg-white border border-gray-200 text-secondary/60 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-gray-50 transition-all flex items-center gap-2 disabled:opacity-50"
+                title="Testar Configuração de E-mail"
+              >
+                {isTestingSmtp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                Testar SMTP
+              </button>
+            )}
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-secondary/20" />
+              <input 
+                type="text" 
+                placeholder={
+                  activeTab === 'produtos' ? "Buscar produtos..." : 
+                  activeTab === 'categorias' ? "Buscar categorias..." : 
+                  "Buscar pedidos..."
+                }
+                className="pl-12 pr-6 py-3 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-primary/20 transition-all w-full md:w-80 font-bold text-secondary"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 

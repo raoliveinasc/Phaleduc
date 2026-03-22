@@ -119,7 +119,7 @@ async function startServer() {
         html: `
           <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 16px; overflow: hidden;">
             <div style="background-color: #1a1a1a; padding: 40px; text-align: center;">
-              <img src="cid:logo" alt="Phaleduc Logo" style="max-width: 150px; margin-bottom: 20px;">
+              <img src="https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/logo-phaleduc.png" alt="Phaleduc Logo" style="max-width: 150px; margin-bottom: 20px;">
               <h1 style="color: #ffffff; margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px;">Phaleduc</h1>
               <p style="color: #ffffff; opacity: 0.6; margin-top: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Educação Bilíngue de Herança</p>
             </div>
@@ -148,11 +148,11 @@ async function startServer() {
               </div>
 
               <div style="margin-top: 40px; text-align: center;">
-                <a href="${req.headers.origin}/alunos-pais" style="background-color: #FFD700; color: #1a1a1a; padding: 16px 32px; border-radius: 12px; text-decoration: none; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Acompanhar Pedido</a>
+                <a href="${req.headers.origin || 'https://phaleduc.com'}/alunos-pais" style="background-color: #FFD700; color: #1a1a1a; padding: 16px 32px; border-radius: 12px; text-decoration: none; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Acompanhar Pedido</a>
               </div>
 
               <div style="margin-top: 40px; text-align: center;">
-                <img src="cid:mascot" alt="Mascote Phaleduc" style="max-width: 100px;">
+                <img src="https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/mascote.png" alt="Mascote Phaleduc" style="max-width: 100px;">
               </div>
             </div>
             <div style="background-color: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999;">
@@ -160,18 +160,6 @@ async function startServer() {
             </div>
           </div>
         `,
-        attachments: [
-          {
-            filename: 'logo.png',
-            path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/logo-phaleduc.png',
-            cid: 'logo'
-          },
-          {
-            filename: 'mascote.png',
-            path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/mascote.png',
-            cid: 'mascot'
-          }
-        ]
       };
 
       await transporter.sendMail(mailOptions);
@@ -186,10 +174,28 @@ async function startServer() {
   app.post('/api/send-order-status-update', async (req, res) => {
     const { orderId, status, customerEmail, customerName, trackingNumber } = req.body;
 
+    console.log(`📧 Attempting to send status update email for Order #${orderId} to ${customerEmail} (Status: ${status})`);
+
+    if (!orderId) {
+      console.error('❌ Cannot send email: Order ID is missing.');
+      return res.status(400).json({ error: 'Order ID is required' });
+    }
+
     if (!customerEmail) {
+      console.error('❌ Cannot send email: Customer email is missing.');
       return res.status(400).json({ error: 'Customer email is required' });
     }
 
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.warn('⚠️ SMTP credentials missing. Email sending skipped (Simulation Mode).');
+      return res.json({ 
+        success: true, 
+        simulated: true, 
+        message: 'SMTP não configurado. O e-mail foi simulado no console.' 
+      });
+    }
+
+    const shortOrderId = String(orderId).slice(0, 8);
     let statusTitle = '';
     let statusMessage = '';
     let statusColor = '#1a1a1a';
@@ -217,21 +223,21 @@ async function startServer() {
         break;
       default:
         statusTitle = `Status do Pedido: ${status}`;
-        statusMessage = `O status do seu pedido #${orderId.slice(0, 8)} foi atualizado para: ${status}`;
+        statusMessage = `O status do seu pedido #${shortOrderId} foi atualizado para: ${status}`;
     }
 
     const mailOptions = {
       from: `"${process.env.SMTP_FROM_NAME || 'Phaleduc Store'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
       to: customerEmail,
-      subject: `Atualização do Pedido #${orderId.slice(0, 8)}: ${statusTitle}`,
+      subject: `Atualização do Pedido #${shortOrderId}: ${statusTitle}`,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 16px; overflow: hidden;">
           <div style="background-color: #1a1a1a; padding: 30px; text-align: center;">
-            <img src="cid:logo" alt="Phaleduc Logo" style="max-width: 120px;">
+            <img src="https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/logo-phaleduc.png" alt="Phaleduc Logo" style="max-width: 120px;">
           </div>
           <div style="padding: 40px;">
             <h2 style="color: ${statusColor}; text-align: center; margin-top: 0;">${statusTitle}</h2>
-            <p>Olá, <strong>${customerName}</strong>,</p>
+            <p>Olá, <strong>${customerName || 'Cliente'}</strong>,</p>
             <p style="color: #444; line-height: 1.6;">${statusMessage}</p>
             
             ${status === 'enviado' && trackingNumber ? `
@@ -242,11 +248,11 @@ async function startServer() {
             ` : ''}
 
             <div style="margin-top: 30px; text-align: center;">
-              <a href="${req.headers.origin}/alunos-pais" style="display: inline-block; background-color: #FFD700; color: #1a1a1a; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 14px;">Ver Detalhes do Pedido</a>
+              <a href="${req.headers.origin || 'https://phaleduc.com'}/alunos-pais" style="display: inline-block; background-color: #FFD700; color: #1a1a1a; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 14px;">Ver Detalhes do Pedido</a>
             </div>
             
             <div style="margin-top: 40px; text-align: center;">
-              <img src="cid:mascot" alt="Mascote Phaleduc" style="max-width: 80px;">
+              <img src="https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/mascote.png" alt="Mascote Phaleduc" style="max-width: 80px;">
             </div>
           </div>
           <div style="background-color: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999;">
@@ -254,18 +260,6 @@ async function startServer() {
           </div>
         </div>
       `,
-      attachments: [
-        {
-          filename: 'logo.png',
-          path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/logo-phaleduc.png',
-          cid: 'logo'
-        },
-        {
-          filename: 'mascote.png',
-          path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/mascote.png',
-          cid: 'mascot'
-        }
-      ]
     };
 
     try {
@@ -273,7 +267,7 @@ async function startServer() {
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error sending status update email:', error);
-      res.status(500).json({ error: 'Failed to send status update email' });
+      res.status(500).json({ error: 'Failed to send status update email: ' + error.message });
     }
   });
 
@@ -457,6 +451,7 @@ async function startServer() {
       html: `
         <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 16px; overflow: hidden;">
           <div style="background-color: #1a1a1a; padding: 40px; text-align: center;">
+            <img src="https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/logo-phaleduc.png" alt="Phaleduc Logo" style="max-width: 150px; margin-bottom: 20px;">
             <h1 style="color: #ffffff; margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px;">Phaleduc</h1>
             <p style="color: #ffffff; opacity: 0.6; margin-top: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Educação Bilíngue de Herança</p>
           </div>
@@ -483,6 +478,10 @@ async function startServer() {
                 ${order.country}
               </p>
             </div>
+
+            <div style="margin-top: 40px; text-align: center;">
+              <img src="https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/mascote.png" alt="Mascote Phaleduc" style="max-width: 100px;">
+            </div>
           </div>
           <div style="background-color: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999;">
             &copy; ${new Date().getFullYear()} Phaleduc. Todos os direitos reservados.
@@ -505,70 +504,32 @@ async function startServer() {
     }
   }
 
-  // API route to send shipping confirmation email
-app.post('/api/send-shipping-email', async (req, res) => {
-  const { orderId, trackingNumber, customerEmail, customerName } = req.body;
+  // API Route: Test SMTP Configuration
+  app.post('/api/test-smtp', async (req, res) => {
+    const { testEmail } = req.body;
 
-  if (!customerEmail) {
-    return res.status(400).json({ error: 'Customer email is required' });
-  }
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      return res.status(400).json({ error: 'SMTP credentials are not configured in environment variables.' });
+    }
 
-  const mailOptions = {
-    from: `"${process.env.SMTP_FROM_NAME || 'Phaleduc Store'}" <${process.env.SMTP_FROM_EMAIL}>`,
-    to: customerEmail,
-    subject: `Seu pedido #${orderId.slice(0, 8)} foi enviado!`,
-    html: `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 16px; overflow: hidden;">
-        <div style="background-color: #1a1a1a; padding: 30px; text-align: center;">
-          <img src="cid:logo" alt="Phaleduc Logo" style="max-width: 120px;">
-        </div>
-        <div style="padding: 40px;">
-          <h2 style="color: #FF6321; text-align: center; margin-top: 0;">Pedido Enviado!</h2>
-          <p>Olá, <strong>${customerName}</strong>,</p>
-          <p>Temos ótimas notícias! Seu pedido <strong>#${orderId.slice(0, 8)}</strong> foi processado e já está a caminho.</p>
-          
-          <div style="background-color: #f9f9f9; padding: 20px; border-radius: 12px; margin: 20px 0; text-align: center; border: 1px solid #eee;">
-            <p style="margin: 0; font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 1px;">Código de Rastreamento</p>
-            <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold; color: #1a1a1a; letter-spacing: 2px;">${trackingNumber}</p>
-          </div>
+    const mailOptions = {
+      from: `"${process.env.SMTP_FROM_NAME || 'Phaleduc Test'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
+      to: testEmail || process.env.SMTP_USER,
+      subject: 'Teste de Configuração SMTP - Phaleduc',
+      text: 'Se você está recebendo este e-mail, sua configuração SMTP está funcionando corretamente!',
+      html: '<h1>Teste de Configuração SMTP</h1><p>Se você está recebendo este e-mail, sua configuração SMTP está funcionando corretamente!</p>'
+    };
 
-          <p style="color: #666; line-height: 1.6;">Você pode acompanhar o status da entrega utilizando o código acima no site da transportadora.</p>
-          
-          <p style="margin-top: 30px; color: #666;">Se tiver qualquer dúvida, responda a este e-mail ou entre em contato com nosso suporte.</p>
-          
-          <div style="margin-top: 40px; text-align: center;">
-            <img src="cid:mascot" alt="Mascote Phaleduc" style="max-width: 80px;">
-          </div>
-        </div>
-        <div style="background-color: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #999;">
-          &copy; ${new Date().getFullYear()} Phaleduc. Todos os direitos reservados.
-        </div>
-      </div>
-    `,
-    attachments: [
-      {
-        filename: 'logo.png',
-        path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/logo-phaleduc.png',
-        cid: 'logo'
-      },
-      {
-        filename: 'mascote.png',
-        path: 'https://raw.githubusercontent.com/raoliveinasc/Phaleduc/main/mascote.png',
-        cid: 'mascot'
-      }
-    ]
-  };
+    try {
+      await transporter.sendMail(mailOptions);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('SMTP Test Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
 
-  try {
-    await transporter.sendMail(mailOptions);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error sending shipping email:', error);
-    res.status(500).json({ error: 'Failed to send shipping email' });
-  }
-});
-
-// Vite middleware for development
+  // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
