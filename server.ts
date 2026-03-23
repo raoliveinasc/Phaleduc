@@ -518,7 +518,7 @@ async function startServer() {
   }
 
   // API Route: Health Check
-  app.get('/api/health', (req, res) => {
+  app.post('/api/health', (req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 

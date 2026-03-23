@@ -314,7 +314,10 @@ export const AdminLoja = () => {
     try {
       // 1. Health Check
       console.log('Starting health check...');
-      const healthResponse = await fetch('/api/health');
+      const healthResponse = await fetch('/api/health', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
       if (!healthResponse.ok) {
         const healthText = await healthResponse.text();
         console.error('Health check failed:', healthResponse.status, healthText);
