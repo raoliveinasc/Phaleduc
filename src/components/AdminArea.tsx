@@ -1487,38 +1487,34 @@ export const AdminArea = () => {
                   { key: 'email', label: 'E-mail', type: 'email' },
                   { key: 'telefone', label: 'Telefone', type: 'tel' },
                   { key: 'endereco', label: 'Endereço', type: 'text' },
-                  { key: 'parent_pin', label: 'PIN de Segurança (4 dígitos)', type: 'text' },
-                  { key: 'senha_temporaria', label: 'Senha Temporária (Admin)', type: 'text' }
+                  { key: 'parent_pin', label: 'PIN de Segurança (4 dígitos)', type: 'text' }
                 ]}
                 extraActions={(pai, reload) => {
                   const handleInvite = async () => {
-                    const tempPassword = Math.random().toString(36).slice(-8).toUpperCase();
-                    
-                    if (!confirm(`Deseja gerar uma senha temporária para ${pai.nome}?\n\nNova senha: ${tempPassword}`)) return;
+                    if (!confirm(`Deseja enviar um convite para ${pai.nome}?\n\nO responsável deverá se cadastrar no portal usando o e-mail: ${pai.email}`)) return;
 
                     try {
                       const { error } = await supabase
                         .from('pais')
                         .update({ 
-                          senha_temporaria: tempPassword,
                           convite_enviado_em: new Date().toISOString()
                         })
                         .eq('id', pai.id);
 
                       if (error) throw error;
                       
-                      alert(`Convite gerado com sucesso!\n\nSenha Temporária: ${tempPassword}\n\nO pai agora pode acessar o portal usando seu e-mail e esta senha.`);
+                      alert(`Convite registrado com sucesso!\n\nO responsável agora pode criar sua conta usando o e-mail cadastrado.`);
                       reload();
                     } catch (err: any) {
                       console.error('Error inviting parent:', err);
-                      alert('Erro ao gerar convite. Verifique se a tabela de pais possui os campos "senha_temporaria" e "convite_enviado_em".');
+                      alert('Erro ao registrar convite.');
                     }
                   };
 
                   return (
                     <button 
                       onClick={handleInvite}
-                      title="Enviar Convite (Gerar Senha)"
+                      title="Registrar Envio de Convite"
                       className="p-2 text-secondary/20 hover:text-success hover:bg-success/10 rounded-lg transition-all"
                     >
                       <Mail className="w-4 h-4" />
@@ -1535,9 +1531,9 @@ export const AdminArea = () => {
                 customSelect="*, pais(nome), tutores(nome)"
                 columns={[
                   { key: 'nome', label: 'Nome' },
-                  { key: 'id', label: 'Código de Acesso', render: (val) => (
+                  { key: 'access_code', label: 'Código de Acesso', render: (val) => (
                     <span className="font-mono bg-gray-100 px-3 py-1 rounded-lg text-primary font-black">
-                      {val.slice(0, 6).toUpperCase()}
+                      {val || '-'}
                     </span>
                   )},
                   { key: 'data_nascimento', label: 'Nascimento', render: (val) => val ? new Date(val).toLocaleDateString() : '-' },
@@ -1548,13 +1544,13 @@ export const AdminArea = () => {
                 ]}
                 fields={[
                   { key: 'nome', label: 'Nome do Aluno', type: 'text' },
+                  { key: 'access_code', label: 'Código de Acesso (6 caracteres)', type: 'text' },
                   { key: 'data_nascimento', label: 'Data de Nascimento', type: 'date' },
                   { key: 'turma_id', label: 'Turma', type: 'select', options: turmasList },
                   { key: 'nivel', label: 'Nível Individual', type: 'select', options: ['Iniciante', 'Intermediário', 'Avançado', 'Nativo'] },
                   { key: 'status', label: 'Status', type: 'select', options: ['ativo', 'inativo'] },
                   { key: 'parent_id', label: 'Responsável', type: 'select', options: parents },
                   { key: 'tutor_id', label: 'Tutor', type: 'select', options: tutors },
-                  { key: 'senha_temporaria', label: 'Senha Temporária (Admin)', type: 'text' },
                   { key: 'observacoes', label: 'Observações', type: 'text' }
                 ]}
               />
@@ -1583,7 +1579,6 @@ export const AdminArea = () => {
                   { key: 'telefone', label: 'Telefone', type: 'tel' },
                   { key: 'especialidade', label: 'Especialidade', type: 'text' },
                   { key: 'bio', label: 'Biografia/Experiência', type: 'text' },
-                  { key: 'senha', label: 'Senha (Manual)', type: 'text' },
                   { key: 'nivel', label: 'Nível (Ex: Bronze, Prata, Ouro)', type: 'text' },
                   { key: 'xp', label: 'XPs', type: 'number' },
                   { key: 'badges', label: 'Badges (Separados por vírgula)', type: 'text' },
@@ -1598,26 +1593,23 @@ export const AdminArea = () => {
                       return;
                     }
 
-                    const tempPassword = Math.random().toString(36).slice(-8).toUpperCase();
-                    
-                    if (!confirm(`Deseja gerar uma senha temporária para ${tutor.nome}?\n\nNova senha: ${tempPassword}`)) return;
+                    if (!confirm(`Deseja enviar um convite para o tutor ${tutor.nome}?\n\nEle deverá criar sua senha definitiva no primeiro acesso.`)) return;
 
                     try {
                       const { error } = await supabase
                         .from('tutores')
                         .update({ 
-                          senha_temporaria: tempPassword,
                           convite_enviado_em: new Date().toISOString()
                         })
                         .eq('id', tutor.id);
 
                       if (error) throw error;
                       
-                      alert(`Convite gerado com sucesso!\n\nSenha Temporária: ${tempPassword}\n\nO tutor agora pode acessar o portal usando seu e-mail e esta senha.`);
+                      alert(`Convite registrado com sucesso!\n\nO tutor agora pode acessar o portal e definir sua senha.`);
                       reload();
                     } catch (err: any) {
                       console.error('Error inviting tutor:', err);
-                      alert('Erro ao gerar convite. Verifique se a tabela de tutores possui os campos "senha_temporaria" e "convite_enviado_em".');
+                      alert('Erro ao registrar convite.');
                     }
                   };
 
@@ -1625,7 +1617,7 @@ export const AdminArea = () => {
                     <div className="flex items-center gap-1">
                       <button 
                         onClick={handleInvite}
-                        title="Enviar Convite (Gerar Senha)"
+                        title="Registrar Envio de Convite"
                         className="p-2 text-secondary/20 hover:text-success hover:bg-success/10 rounded-lg transition-all"
                       >
                         <Mail className="w-4 h-4" />

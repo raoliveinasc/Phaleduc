@@ -28,11 +28,9 @@ CREATE TABLE IF NOT EXISTS pais (
     email TEXT UNIQUE NOT NULL,
     telefone TEXT,
     endereco TEXT,
-    senha TEXT,
-    senha_temporaria TEXT,
-    convite_enviado_em TIMESTAMP WITH TIME ZONE,
     parent_pin TEXT DEFAULT '0000',
     status TEXT DEFAULT 'ativo',
+    convite_enviado_em TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -45,15 +43,13 @@ CREATE TABLE IF NOT EXISTS tutores (
     telefone TEXT,
     especialidade TEXT,
     bio TEXT,
-    senha TEXT,
-    senha_temporaria TEXT,
-    convite_enviado_em TIMESTAMP WITH TIME ZONE,
     status TEXT DEFAULT 'pendente',
     nivel TEXT DEFAULT 'Bronze',
     xp INTEGER DEFAULT 0,
     badges TEXT, -- Lista de badges separados por vírgula
     projeto_final_status TEXT DEFAULT 'pendente',
     projeto_final_feedback TEXT,
+    convite_enviado_em TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -75,11 +71,11 @@ CREATE TABLE IF NOT EXISTS alunos (
     nivel TEXT, -- Ex: Iniciante, Intermediário
     avatar TEXT,
     observacoes TEXT,
-    senha_temporaria TEXT,
+    status TEXT DEFAULT 'ativo',
+    access_code TEXT UNIQUE,
     parent_id UUID REFERENCES pais(id) ON DELETE CASCADE ON UPDATE CASCADE,
     tutor_id UUID REFERENCES tutores(id) ON DELETE SET NULL ON UPDATE CASCADE,
     turma_id UUID REFERENCES turmas(id) ON DELETE SET NULL,
-    status TEXT DEFAULT 'ativo',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

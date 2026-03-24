@@ -2837,9 +2837,7 @@ const PasswordCreationView = ({
             .update({ 
               id: newAuthId,
               user_id: newAuthId,
-              nome: userName,
-              senha: newPassword,
-              senha_temporaria: null 
+              nome: userName
             })
             .eq('id', oldId);
           
@@ -2852,9 +2850,7 @@ const PasswordCreationView = ({
               id: newAuthId,
               user_id: newAuthId,
               email: email,
-              nome: userName,
-              senha: newPassword,
-              senha_temporaria: null 
+              nome: userName
             }, { onConflict: 'email' });
           
           if (upsertError) throw upsertError;
@@ -2872,14 +2868,10 @@ const PasswordCreationView = ({
         // Se o ID mudou, precisamos notificar o pai para atualizar o estado
         onSuccess(newAuthId);
       } else {
-        // Caminho normal: apenas atualiza a senha (usuário já está logado no Auth ou apenas no DB)
-        const { error } = await supabase
-          .from('pais')
-          .update({ 
-            senha: newPassword,
-            senha_temporaria: null 
-          })
-          .eq('id', userId);
+        // Caminho normal: apenas atualiza a senha no Auth
+        const { error } = await supabase.auth.updateUser({
+          password: newPassword
+        });
 
         if (error) throw error;
         onSuccess();
@@ -3118,11 +3110,12 @@ const ChildRegistrationView = ({
   );
 };
 
-const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (data: any) => void, onSwitchToRegister: () => void, onStudentLogin: (code: string) => void }) => {
+const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (data: any) => void, onSwitchToRegister: () => void, onStudentLogin: (code: string, pin: string) => void }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginMode, setLoginMode] = useState<'parent' | 'student'>('parent');
   const [studentCode, setStudentCode] = useState("");
+  const [parentPin, setParentPin] = useState("");
 
   return (
     <motion.div 
@@ -3163,7 +3156,7 @@ const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (
         <p className="text-secondary/50 text-center mb-10 font-medium">
           {loginMode === 'parent' 
             ? "Acesse sua conta para gerenciar os perfis dos seus filhos." 
-            : "Digite seu código de aluno para começar a aventura!"}
+            : "Digite seu código de aluno e o PIN dos seus pais."}
         </p>
         
         {loginMode === 'parent' ? (
@@ -3198,7 +3191,7 @@ const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (
             </button>
           </form>
         ) : (
-          <form onSubmit={(e) => { e.preventDefault(); onStudentLogin(studentCode); }} className="space-y-6">
+          <form onSubmit={(e) => { e.preventDefault(); onStudentLogin(studentCode, parentPin); }} className="space-y-6">
             <div className="space-y-2">
               <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Código do Aluno</label>
               <input 
@@ -3209,7 +3202,19 @@ const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (
                 value={studentCode}
                 onChange={(e) => setStudentCode(e.target.value)}
               />
-              <p className="text-xs text-secondary/30 font-bold text-center mt-2">Peça seu código para seu pai ou mãe.</p>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">PIN dos Pais</label>
+              <input 
+                type="password" 
+                required
+                maxLength={4}
+                className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-primary focus:bg-white focus:outline-none transition-all font-black text-secondary text-center text-2xl tracking-[1em]"
+                placeholder="••••"
+                value={parentPin}
+                onChange={(e) => setParentPin(e.target.value)}
+              />
+              <p className="text-xs text-secondary/30 font-bold text-center mt-2">Peça o código e o PIN para seu pai ou mãe.</p>
             </div>
             <button 
               type="submit"
@@ -3933,11 +3938,7 @@ const AlunosPaisPage = () => {
       await checkSubscription(userId);
 
       // 4. Decidir destino
-      if (family?.senha_temporaria) {
-        console.log("Redirecionando para onboarding: senha temporária");
-        setView('onboarding');
-        setOnboardingStep('password');
-      } else if (!family?.parent_pin || family.parent_pin === '0000') {
+      if (!family?.parent_pin || family.parent_pin === '0000') {
         console.log("Redirecionando para onboarding: PIN não definido");
         setView('onboarding');
         setOnboardingStep('pin');
@@ -4247,7 +4248,7 @@ const AlunosPaisPage = () => {
     setLoading(true);
     
     try {
-      // 1. Tentar login via Supabase Auth primeiro (Caminho padrão)
+      // 1. Tentar login via Supabase Auth (Caminho único e seguro)
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
@@ -4260,34 +4261,35 @@ const AlunosPaisPage = () => {
         return;
       }
 
-      // 2. Se falhar, verificar se é um "Primeiro Acesso" com senha temporária na tabela 'pais'
-      console.log("Verificando senha temporária na tabela 'pais'...");
-      const { data: family } = await supabase
+      // 2. Se falhar no Auth, verificar se é um usuário legado (migração)
+      // Nota: Isso assume que ainda temos a coluna 'senha' ou 'senha_temporaria' no DB
+      // para validar o primeiro acesso e migrar para o Auth.
+      // Se já removemos, este passo falhará graciosamente.
+      const { data: legacyFamily, error: legacyError } = await supabase
         .from('pais')
         .select('*')
         .eq('email', data.email)
         .maybeSingle();
 
-      if (family && (family.senha_temporaria === data.password || family.senha === data.password)) {
-        console.log("Senha válida encontrada na tabela 'pais'");
-        // Usuário existe na tabela 'pais' mas talvez não no Auth ou com senha diferente
-        // Simulamos um estado de "pré-login" para forçar a criação/sincronização de senha
-        setUser({ 
-          id: family.id, 
-          email: family.email, 
-          isTemp: true,
-          nome: family.nome 
-        });
-        setFamilyData(family);
+      if (!legacyError && legacyFamily) {
+        // Verificar se a senha coincide (legado)
+        // Se o usuário tem senha_temporaria ou senha no DB, podemos tentar migrar
+        // Mas como estamos removendo essas colunas, a migração deve ser feita
+        // ANTES da remoção total ou via um fluxo de "Esqueci minha senha".
         
-        // Sempre forçar troca de senha se logou via DB e não via Auth
-        setView('onboarding');
-        setOnboardingStep('password');
-        return;
+        // Se o usuário existe no DB mas não no Auth, podemos sugerir que ele crie uma senha
+        // ou use o fluxo de recuperação.
+        console.log("Usuário legado encontrado, mas sem conta no Auth.");
       }
 
-      // 3. Se tudo falhar
-      toast.error("E-mail ou senha incorretos. Se este é seu primeiro acesso, use a senha temporária enviada pelo administrador.");
+      // 3. Se falhar, informar o usuário
+      if (authError) {
+        if (authError.message.includes("Invalid login credentials")) {
+          toast.error("E-mail ou senha incorretos. Verifique seus dados.");
+        } else {
+          toast.error(`Erro no login: ${authError.message}`);
+        }
+      }
     } catch (err) {
       console.error("Erro no processo de login:", err);
       toast.error("Ocorreu um erro ao tentar fazer login.");
@@ -4296,28 +4298,38 @@ const AlunosPaisPage = () => {
     }
   };
 
-  const handleStudentQuickLogin = async (code: string) => {
-    if (!code) return;
+  const handleStudentQuickLogin = async (code: string, pin: string) => {
+    if (!code || !pin) return;
     setLoading(true);
     
-    // Buscar todos os alunos e filtrar pelo prefixo do ID (Código de Acesso)
-    const { data: students, error } = await supabase
-      .from('alunos')
-      .select('*, pais(*)');
+    try {
+      // Buscar o aluno pelo código de acesso
+      const { data: students, error } = await supabase
+        .from('alunos')
+        .select('*, pais(*)')
+        .eq('access_code', code.toUpperCase());
 
-    if (students) {
-      const student = students.find(s => s.id.slice(0, 6).toUpperCase() === code.toUpperCase());
-      if (student) {
-        setSelectedChild(student);
-        setActiveChildId(student.id);
-        setView('child');
+      if (error) throw error;
+
+      if (students && students.length > 0) {
+        const student = students[0];
+        // Verificar se o PIN do pai coincide
+        if (student.pais && student.pais.parent_pin === pin) {
+          setSelectedChild(student);
+          setActiveChildId(student.id);
+          setView('child');
+        } else {
+          toast.error("PIN dos pais incorreto.");
+        }
       } else {
-        alert("Código de aluno não encontrado. Verifique com seus pais.");
+        toast.error("Código de aluno não encontrado.");
       }
-    } else {
-      alert("Erro ao buscar alunos.");
+    } catch (err) {
+      console.error("Erro no login do aluno:", err);
+      toast.error("Erro ao validar acesso.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleRegister = async (data: any) => {
@@ -4422,13 +4434,9 @@ const AlunosPaisPage = () => {
 
     setIsSavingPassword(true);
     try {
-      const { error } = await supabase
-        .from('pais')
-        .update({ 
-          senha: newPassword,
-          senha_temporaria: null 
-        })
-        .eq('id', user.id);
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
 
       if (error) throw error;
 
@@ -4436,7 +4444,7 @@ const AlunosPaisPage = () => {
       setShowPasswordChange(false);
       setNewPassword('');
       setConfirmPassword('');
-      setFamilyData({ ...familyData, senha: newPassword, senha_temporaria: null });
+      setFamilyData({ ...familyData });
     } catch (err) {
       console.error('Error saving password:', err);
       alert('Erro ao salvar nova senha.');
@@ -5419,6 +5427,7 @@ const TutoresPage = () => {
   const [evaluationFeedback, setEvaluationFeedback] = useState('');
   const [isSavingMetrics, setIsSavingMetrics] = useState(false);
   const [isSavingLoop, setIsSavingLoop] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [loopProgress, setLoopProgress] = useState<Record<string, number>>({});
   const [metrics, setMetrics] = useState({
@@ -5916,45 +5925,61 @@ const TutoresPage = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
+    setLoading(true);
     try {
-      const { data: tutor, error } = await supabase
-        .from('tutores')
-        .select('*')
-        .eq('email', email)
-        .single();
+      // Tentar login via Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
 
-      if (error || !tutor) {
-        alert('Tutor não encontrado ou e-mail incorreto.');
+      if (authError) {
+        toast.error(`Erro no login: ${authError.message}`);
         return;
       }
 
-      // Check if tutor is active
-      if (tutor.status !== 'ativo') {
-        alert('Seu cadastro ainda não está ativo. Entre em contato com o administrador.');
-        return;
-      }
+      if (authData.user) {
+        // Buscar dados do tutor
+        const { data: tutor, error: tutorError } = await supabase
+          .from('tutores')
+          .select('*')
+          .eq('user_id', authData.user.id)
+          .maybeSingle();
 
-      // Validate password
-      const trimmedPassword = password.trim();
+        if (tutorError || !tutor) {
+          // Se não encontrou pelo user_id, tentar pelo email para migração
+          const { data: tutorByEmail } = await supabase
+            .from('tutores')
+            .select('*')
+            .eq('email', email)
+            .maybeSingle();
 
-      // 1. Check permanent password first
-      if (tutor.senha && tutor.senha === trimmedPassword) {
-        setTutorData(tutor);
+          if (tutorByEmail) {
+            // Vincular o tutor ao novo user_id
+            await supabase.from('tutores').update({ user_id: authData.user.id }).eq('id', tutorByEmail.id);
+            setTutorData({ ...tutorByEmail, user_id: authData.user.id });
+          } else {
+            toast.error('Tutor não encontrado no banco de dados.');
+            return;
+          }
+        } else {
+          setTutorData(tutor);
+        }
+
+        if (tutor && tutor.status !== 'ativo') {
+          toast.error('Seu cadastro ainda não está ativo.');
+          await supabase.auth.signOut();
+          return;
+        }
+
         setIsLoggedIn(true);
         setMustCreatePassword(false);
-      } 
-      // 2. Check temporary password if no permanent password or if it matches
-      // Note: Temporary passwords are generated as uppercase, so we check case-insensitively
-      else if (tutor.senha_temporaria && tutor.senha_temporaria.toUpperCase() === trimmedPassword.toUpperCase()) {
-        setTutorData(tutor);
-        setIsLoggedIn(true);
-        setMustCreatePassword(true); // Force password creation
-      } else {
-        alert('Senha incorreta. Verifique seus dados ou o convite enviado pelo administrador.');
       }
     } catch (err) {
       console.error('Login error:', err);
-      alert('Erro ao realizar login. Tente novamente mais tarde.');
+      toast.error('Erro ao realizar login.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -6001,8 +6026,6 @@ const TutoresPage = () => {
             id: newAuthId,
             user_id: newAuthId,
             nome: tutorData.nome,
-            senha: newPassword,
-            senha_temporaria: null,
             status: 'ativo'
           })
           .eq('id', oldId);
@@ -6016,8 +6039,6 @@ const TutoresPage = () => {
             user_id: newAuthId,
             email: tutorData.email,
             nome: tutorData.nome,
-            senha: newPassword,
-            senha_temporaria: null,
             status: 'ativo'
           }, { onConflict: 'email' });
         
@@ -6047,7 +6068,7 @@ const TutoresPage = () => {
       }
 
       // Atualizar estado local
-      setTutorData(prev => ({ ...prev, id: newAuthId, senha: newPassword, senha_temporaria: null }));
+      setTutorData(prev => ({ ...prev, id: newAuthId }));
       setMustCreatePassword(false);
       setShowPasswordChange(false);
       setNewPassword('');
