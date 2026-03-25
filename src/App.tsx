@@ -3110,7 +3110,7 @@ const ChildRegistrationView = ({
   );
 };
 
-const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (data: any) => void, onSwitchToRegister: () => void, onStudentLogin: (code: string, pin: string) => void }) => {
+const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin, onForgotPassword }: { onLogin: (data: any) => void, onSwitchToRegister: () => void, onStudentLogin: (code: string, pin: string) => void, onForgotPassword: (email: string) => void }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginMode, setLoginMode] = useState<'parent' | 'student'>('parent');
@@ -3173,7 +3173,22 @@ const LoginView = ({ onLogin, onSwitchToRegister, onStudentLogin }: { onLogin: (
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest ml-4">Senha</label>
+              <div className="flex justify-between items-center ml-4">
+                <label className="block text-xs font-black text-secondary/40 uppercase tracking-widest">Senha</label>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    if (!email) {
+                      toast.error("Por favor, informe seu e-mail para recuperar a senha.");
+                      return;
+                    }
+                    onForgotPassword(email);
+                  }}
+                  className="text-[10px] font-bold text-primary hover:underline"
+                >
+                  Esqueceu a senha?
+                </button>
+              </div>
               <input 
                 type="password" 
                 required
@@ -4183,27 +4198,49 @@ const AlunosPaisPage = () => {
     }
 
     // Check completion
-    const isCompleted = resource && childExecutions.some(ex => ex.recurso_id === resource.id);
+    const isCompleted = stationId === 'missao' && !resource
+      ? childExecutions.some(ex => ex.tipo_atividade === 'missao' && ex.semana_inicio === loopConfig.semana_inicio)
+      : resource && childExecutions.some(ex => ex.recurso_id === resource.id);
+    
     if (isCompleted) return 'completed';
 
     return 'available';
   };
 
   const handleCompleteActivity = async (recursoId: string, tipo: string) => {
-    if (!activeChildId) return;
+    if (!activeChildId || !loopConfig) return;
+
+    console.log('Completing activity:', { recursoId, tipo, activeChildId });
 
     try {
+      // Check if it's a manual mission or an invalid UUID
+      const isManual = String(recursoId).trim() === 'missao-manual';
+      
+      // UUID validation regex
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const isValidUUID = uuidRegex.test(recursoId);
+
+      console.log('Activity check:', { isManual, isValidUUID });
+
+      const insertData = {
+        aluno_id: activeChildId,
+        recurso_id: (isManual || !isValidUUID) ? null : recursoId,
+        tipo_atividade: tipo,
+        semana_inicio: loopConfig.semana_inicio,
+        status: 'concluido',
+        data_conclusao: new Date().toISOString()
+      };
+
+      console.log('Inserting activity execution:', insertData);
+
       const { error } = await supabase
         .from('execucoes_atividades')
-        .insert([{
-          aluno_id: activeChildId,
-          recurso_id: recursoId,
-          tipo_atividade: tipo,
-          status: 'concluido',
-          data_conclusao: new Date().toISOString()
-        }]);
+        .insert([insertData]);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error finishing activity:', error);
+        throw error;
+      }
 
       // Atualizar lista local
       fetchChildData(activeChildId);
@@ -4241,6 +4278,19 @@ const AlunosPaisPage = () => {
       alert(`Erro ao enviar reflexão: ${err.message || 'Verifique se as tabelas foram criadas corretamente no banco de dados.'}`);
     } finally {
       setIsSubmittingReflection(false);
+    }
+  };
+
+  const handleForgotPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast.success("E-mail de recuperação enviado! Verifique sua caixa de entrada.");
+    } catch (err: any) {
+      console.error("Error resetting password:", err);
+      toast.error("Erro ao enviar e-mail de recuperação: " + err.message);
     }
   };
 
@@ -4346,7 +4396,12 @@ const AlunosPaisPage = () => {
     });
 
     if (authError) {
-      alert("Erro no cadastro: " + authError.message);
+      if (authError.message.includes("already registered")) {
+        toast.error("Este e-mail já está cadastrado. Por favor, faça login ou recupere sua senha.");
+        setView('login');
+      } else {
+        toast.error("Erro no cadastro: " + authError.message);
+      }
       setLoading(false);
       return;
     }
@@ -4469,6 +4524,7 @@ const AlunosPaisPage = () => {
             onLogin={handleLogin} 
             onSwitchToRegister={() => setView('register')} 
             onStudentLogin={handleStudentQuickLogin}
+            onForgotPassword={handleForgotPassword}
           />
         )}
 
@@ -5482,23 +5538,54 @@ const TutoresPage = () => {
       weeklyLoop.missao?.id
     ].filter(Boolean);
 
-    if (resourceIds.length === 0) {
+    const hasManualMission = !weeklyLoop.missao?.id;
+
+    if (resourceIds.length === 0 && !hasManualMission) {
       setLoopProgress({});
       return;
     }
 
     try {
-      const { data: executions } = await supabase
+      let query = supabase
         .from('execucoes_atividades')
-        .select('aluno_id, recurso_id')
-        .in('recurso_id', resourceIds);
+        .select('aluno_id, recurso_id, tipo_atividade, semana_inicio');
+
+      const orFilters = [];
+      if (resourceIds.length > 0) {
+        orFilters.push(`recurso_id.in.(${resourceIds.join(',')})`);
+      }
+      if (hasManualMission) {
+        orFilters.push(`and(tipo_atividade.eq.missao,semana_inicio.eq.${weeklyLoop.semana_inicio})`);
+      }
+
+      const { data: executions } = await query.or(orFilters.join(','));
 
       const progress: Record<string, number> = {};
       const types = ['historia', 'jogo', 'tarefa', 'revisao', 'missao'];
 
       types.forEach(type => {
         const resource = weeklyLoop[type];
-        if (!resource) {
+        
+        // Se for missão manual
+        if (type === 'missao' && !resource?.id) {
+          const manualExecutions = executions?.filter(ex => ex.tipo_atividade === 'missao' && ex.semana_inicio === weeklyLoop.semana_inicio) || [];
+          if (selectedStudent) {
+            const completed = manualExecutions.some(ex => ex.aluno_id === selectedStudent.id);
+            progress[type] = completed ? 100 : 0;
+          } else if (selectedTurma) {
+            const studentsInTurma = tutorStudents.filter(s => s.turma_id === selectedTurma.id);
+            if (studentsInTurma.length === 0) {
+              progress[type] = 0;
+            } else {
+              const studentIdsInTurma = studentsInTurma.map(s => s.id);
+              const completedCount = manualExecutions.filter(ex => studentIdsInTurma.includes(ex.aluno_id)).length;
+              progress[type] = Math.round((completedCount / studentsInTurma.length) * 100);
+            }
+          }
+          return;
+        }
+
+        if (!resource?.id) {
           progress[type] = 0;
           return;
         }
@@ -5922,6 +6009,19 @@ const TutoresPage = () => {
     }
   };
 
+  const handleForgotPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast.success("E-mail de recuperação enviado! Verifique sua caixa de entrada.");
+    } catch (err: any) {
+      console.error("Error resetting password:", err);
+      toast.error("Erro ao enviar e-mail de recuperação: " + err.message);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
@@ -6158,7 +6258,13 @@ const TutoresPage = () => {
           
           <div className="text-center space-y-4">
             <p className="text-sm text-secondary/40 font-medium">
-              Esqueceu sua senha? <span className="text-secondary cursor-pointer hover:underline">Clique aqui</span>
+              Esqueceu sua senha? <button onClick={() => {
+                if (!email) {
+                  toast.error("Por favor, informe seu e-mail para recuperar a senha.");
+                  return;
+                }
+                handleForgotPassword(email);
+              }} className="text-secondary cursor-pointer hover:underline">Clique aqui</button>
             </p>
             <div className="pt-4 border-t border-gray-100">
               <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest mb-4">Ainda não é um tutor?</p>
@@ -7600,6 +7706,84 @@ const ScrollToTop = () => {
   return null;
 };
 
+const ResetPasswordPage = () => {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      toast.error("As senhas não coincidem.");
+      return;
+    }
+    if (password.length < 6) {
+      toast.error("A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      toast.success("Senha atualizada com sucesso!");
+      navigate('/alunos-pais');
+    } catch (err: any) {
+      console.error("Error resetting password:", err);
+      toast.error("Erro ao atualizar senha: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-[80vh] flex items-center justify-center bg-gray-50 p-6">
+      <div className="max-w-md w-full bg-white rounded-[40px] shadow-2xl p-12 space-y-8 border border-gray-100">
+        <div className="text-center space-y-4">
+          <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <Lock className="w-10 h-10 text-primary" />
+          </div>
+          <h2 className="text-4xl font-black text-secondary">Nova Senha</h2>
+          <p className="text-secondary/60 font-medium italic">Crie uma nova senha segura para sua conta.</p>
+        </div>
+
+        <form onSubmit={handleReset} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase tracking-widest text-secondary/40 ml-4">Nova Senha</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase tracking-widest text-secondary/40 ml-4">Confirmar Senha</label>
+            <input 
+              type="password" 
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <button 
+            type="submit"
+            disabled={loading}
+            className="w-full bg-primary text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Atualizar Senha'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // --- Main App ---
 
 export default function App() {
@@ -7642,6 +7826,7 @@ function AppContent() {
             <Route path="/jogos" element={<GamesPlatform />} />
             <Route path="/alunos-pais" element={<AlunosPaisPage />} />
             <Route path="/tutores" element={<TutoresPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/admin/*" element={<AdminArea />} />
           </Routes>
         </AnimatePresence>

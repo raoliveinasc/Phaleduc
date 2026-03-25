@@ -308,15 +308,40 @@ export const TutorRegistration = ({ onSuccess }: { onSuccess: () => void }) => {
     setLoading(true);
 
     try {
+      // 1. Criar conta no Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.senha || '',
+        options: {
+          data: {
+            full_name: formData.nome,
+            role: 'tutor'
+          }
+        }
+      });
+
+      if (authError) {
+        if (authError.message.includes("already registered")) {
+          alert("Este e-mail já está cadastrado. Por favor, tente fazer login no Portal do Tutor.");
+          return;
+        }
+        throw authError;
+      }
+
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("Falha ao criar conta de autenticação.");
+
+      // 2. Criar registro na tabela tutores
       const { error } = await supabase
         .from('tutores')
         .insert({
+          id: userId,
+          user_id: userId,
           nome: formData.nome,
           email: formData.email,
           telefone: formData.telefone,
           especialidade: formData.especialidade,
           bio: formData.bio,
-          senha: formData.senha,
           status: 'pendente' // New tutors start as pending review
         });
 

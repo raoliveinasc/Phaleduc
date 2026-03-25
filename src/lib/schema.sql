@@ -134,8 +134,8 @@ CREATE TABLE IF NOT EXISTS loop_semanal_config (
 );
 
 -- Índices únicos para garantir apenas um config por semana por aluno ou turma
-CREATE UNIQUE INDEX IF NOT EXISTS idx_loop_config_aluno_semana ON loop_semanal_config (aluno_id, semana_inicio) WHERE aluno_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_loop_config_turma_semana ON loop_semanal_config (turma_id, semana_inicio) WHERE turma_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loop_config_aluno_semana ON loop_semanal_config (aluno_id, semana_inicio);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loop_config_turma_semana ON loop_semanal_config (turma_id, semana_inicio);
 
 -- Tabela de Biblioteca de Recursos
 CREATE TABLE IF NOT EXISTS biblioteca_recursos (
@@ -175,8 +175,8 @@ CREATE TABLE IF NOT EXISTS loops_semanais (
 );
 
 -- Índices únicos para garantir apenas um loop por semana por aluno ou turma
-CREATE UNIQUE INDEX IF NOT EXISTS idx_loops_aluno_semana ON loops_semanais (aluno_id, semana_referencia) WHERE aluno_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_loops_turma_semana ON loops_semanais (turma_id, semana_referencia) WHERE turma_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loops_aluno_semana ON loops_semanais (aluno_id, semana_referencia);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loops_turma_semana ON loops_semanais (turma_id, semana_referencia);
 
 -- Tabela para as missões de casa culturais
 CREATE TABLE IF NOT EXISTS missoes_casa (
@@ -205,8 +205,14 @@ CREATE TABLE IF NOT EXISTS execucoes_atividades (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
     recurso_id UUID REFERENCES biblioteca_recursos(id) ON DELETE CASCADE,
+    semana_inicio DATE, -- Para missões manuais ou controle semanal
+    tipo_atividade TEXT, -- historia, jogo, tarefa, revisao, missao
+    status TEXT DEFAULT 'concluido', -- concluido, avaliado
+    pontos INTEGER DEFAULT 0,
+    feedback_tutor TEXT,
+    avaliado_em TIMESTAMP WITH TIME ZONE,
     data_conclusao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(aluno_id, recurso_id)
+    UNIQUE(aluno_id, recurso_id, semana_inicio)
 );
 
 -- Tabela de Categorias da Loja
@@ -270,7 +276,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES pais(id) ON DELETE CASCADE ON UPDATE CASCADE,
     stripe_customer_id TEXT,
-    stripe_subscription_id TEXT,
+    stripe_subscription_id TEXT UNIQUE,
     plan_type TEXT NOT NULL, -- 'mensal', 'semestral', 'anual'
     status TEXT NOT NULL DEFAULT 'inactive', -- 'active', 'inactive', 'past_due', 'canceled'
     current_period_start TIMESTAMP WITH TIME ZONE,
