@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS reflexoes_familia (
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
     familia_id UUID REFERENCES pais(id) ON DELETE CASCADE ON UPDATE CASCADE,
     semana_inicio DATE,
+    loop_config_id UUID REFERENCES loop_semanal_config(id) ON DELETE SET NULL,
     engajamento INTEGER CHECK (engajamento >= 1 AND engajamento <= 5),
     comentario TEXT,
     audio_url TEXT, -- URL para o áudio/vídeo de 30-60 seg
@@ -205,6 +206,7 @@ CREATE TABLE IF NOT EXISTS execucoes_atividades (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     aluno_id UUID REFERENCES alunos(id) ON DELETE CASCADE,
     recurso_id UUID REFERENCES biblioteca_recursos(id) ON DELETE CASCADE,
+    loop_config_id UUID REFERENCES loop_semanal_config(id) ON DELETE SET NULL,
     semana_inicio DATE, -- Para missões manuais ou controle semanal
     tipo_atividade TEXT, -- historia, jogo, tarefa, revisao, missao
     status TEXT DEFAULT 'concluido', -- concluido, avaliado
@@ -214,6 +216,11 @@ CREATE TABLE IF NOT EXISTS execucoes_atividades (
     data_conclusao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(aluno_id, recurso_id, semana_inicio)
 );
+
+-- Garante que não existam duplicatas de missões manuais para o mesmo aluno na mesma semana
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_manual_mission 
+ON execucoes_atividades (aluno_id, semana_inicio, loop_config_id) 
+WHERE recurso_id IS NULL AND tipo_atividade = 'missao';
 
 -- Tabela de Categorias da Loja
 CREATE TABLE IF NOT EXISTS store_categories (

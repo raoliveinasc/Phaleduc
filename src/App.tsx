@@ -4098,36 +4098,50 @@ const AlunosPaisPage = () => {
     const mondayStr = getMonday(new Date());
 
     try {
-      // Primeiro tenta buscar por aluno individual
-      let { data: config, error: configError } = await supabase
+      // 1. Buscar config individual
+      let { data: individualConfig, error: configError } = await supabase
         .from('loops_semanais')
         .select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)')
         .eq('aluno_id', childId)
         .eq('semana_referencia', mondayStr)
         .maybeSingle();
       
-      if (configError) console.error("Erro ao buscar loops_semanais:", configError);
+      if (configError) console.error("Erro ao buscar loops_semanais individual:", configError);
       
-      // Verifica se o config do aluno está vazio (sem nenhuma atividade)
-      const isConfigEmpty = !config || (!config.historia_id && !config.jogo_id && !config.tarefa_id && !config.revisao_id && !config.missao_id);
-
-      // Se não encontrar ou se o config individual estiver vazio, tenta buscar pela turma do aluno
-      if (isConfigEmpty) {
-        const { data: student } = await supabase.from('alunos').select('turma_id').eq('id', childId).maybeSingle();
-        if (student?.turma_id) {
-          const { data: turmaConfig } = await supabase
-            .from('loops_semanais')
-            .select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)')
-            .eq('turma_id', student.turma_id)
-            .eq('semana_referencia', mondayStr)
-            .maybeSingle();
-          
-          // Só substitui se o da turma tiver conteúdo
-          if (turmaConfig && (turmaConfig.historia_id || turmaConfig.jogo_id || turmaConfig.tarefa_id || turmaConfig.revisao_id || turmaConfig.missao_id)) {
-            config = turmaConfig;
-          }
+      // 2. Buscar config da turma (se o aluno tiver turma)
+      let finalConfig = individualConfig || {};
+      const { data: student } = await supabase.from('alunos').select('turma_id').eq('id', childId).maybeSingle();
+      
+      if (student?.turma_id) {
+        const { data: turmaConfig } = await supabase
+          .from('loops_semanais')
+          .select('*, historia:historia_id(*), jogo:jogo_id(*), tarefa:tarefa_id(*), revisao:revisao_id(*), missao:missao_id(*)')
+          .eq('turma_id', student.turma_id)
+          .eq('semana_referencia', mondayStr)
+          .maybeSingle();
+        
+        if (turmaConfig) {
+          // Mescla: individual tem prioridade sobre turma em cada atividade
+          finalConfig = {
+            ...turmaConfig,
+            ...individualConfig,
+            // Garante que os objetos de recurso individuais (se existirem) sobrescrevam os da turma
+            historia: individualConfig?.historia || turmaConfig.historia,
+            jogo: individualConfig?.jogo || turmaConfig.jogo,
+            tarefa: individualConfig?.tarefa || turmaConfig.tarefa,
+            revisao: individualConfig?.revisao || turmaConfig.revisao,
+            missao: individualConfig?.missao || turmaConfig.missao,
+            // Mescla agendamentos também
+            historia_agendamento: individualConfig?.historia_agendamento || turmaConfig.historia_agendamento,
+            jogo_agendamento: individualConfig?.jogo_agendamento || turmaConfig.jogo_agendamento,
+            tarefa_agendamento: individualConfig?.tarefa_agendamento || turmaConfig.tarefa_agendamento,
+            revisao_agendamento: individualConfig?.revisao_agendamento || turmaConfig.revisao_agendamento,
+            missao_agendamento: individualConfig?.missao_agendamento || turmaConfig.missao_agendamento,
+          };
         }
       }
+
+      let config = Object.keys(finalConfig).length > 0 ? finalConfig : null;
 
       // Buscar configurações extras (missão, desbloqueios)
       let { data: extraConfig, error: extraError } = await supabase
@@ -4158,12 +4172,12 @@ const AlunosPaisPage = () => {
       
       if (config) {
         if (extraConfig) {
-          setLoopConfig({ ...config, ...extraConfig });
+          setLoopConfig({ ...config, ...extraConfig, loop_config_id: extraConfig.id });
         } else {
           setLoopConfig(config);
         }
       } else if (extraConfig) {
-        setLoopConfig(extraConfig);
+        setLoopConfig({ ...extraConfig, loop_config_id: extraConfig.id });
       }
 
       console.log(`[fetchChildData] childId: ${childId}, loopConfig:`, config ? { ...config, ...extraConfig } : extraConfig);
@@ -4188,7 +4202,11 @@ const AlunosPaisPage = () => {
     if (!resource && stationId !== 'missao') return 'locked';
 
     // Verificar se está desbloqueado pelo tutor (se houver essa config)
-    const unlockKey = stationId === 'missao' ? 'missao_sexta_desbloqueada' : `${stationId}_desbloqueada`;
+    const unlockKey = stationId === 'missao' ? 'missao_sexta_desbloqueada' : 
+                     stationId === 'jogo' ? 'jogo_desbloqueado' : `${stationId}_desbloqueada`;
+    
+    // Se a flag de desbloqueio existir e for explicitamente false, bloqueia.
+    // Se for undefined (não configurado pelo tutor ainda), permitimos se houver recurso.
     if (loopConfig[unlockKey] === false) return 'locked';
 
     // Check scheduling
@@ -4199,7 +4217,11 @@ const AlunosPaisPage = () => {
 
     // Check completion
     const isCompleted = stationId === 'missao' && !resource
-      ? childExecutions.some(ex => ex.tipo_atividade === 'missao' && ex.semana_inicio === loopConfig.semana_inicio)
+      ? childExecutions.some(ex => 
+          ex.tipo_atividade === 'missao' && 
+          ex.semana_inicio === (loopConfig.semana_inicio || loopConfig.semana_referencia) && 
+          ex.loop_config_id === loopConfig.loop_config_id
+        )
       : resource && childExecutions.some(ex => ex.recurso_id === resource.id);
     
     if (isCompleted) return 'completed';
@@ -4207,26 +4229,22 @@ const AlunosPaisPage = () => {
     return 'available';
   };
 
-  const handleCompleteActivity = async (recursoId: string, tipo: string) => {
+  const handleCompleteActivity = async (recursoId: string, tipo: string, isManual?: boolean) => {
     if (!activeChildId || !loopConfig) return;
 
-    console.log('Completing activity:', { recursoId, tipo, activeChildId });
+    console.log('Completing activity:', { recursoId, tipo, activeChildId, isManual });
 
     try {
-      // Check if it's a manual mission or an invalid UUID
-      const isManual = String(recursoId).trim() === 'missao-manual';
-      
       // UUID validation regex
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       const isValidUUID = uuidRegex.test(recursoId);
 
-      console.log('Activity check:', { isManual, isValidUUID });
-
       const insertData = {
         aluno_id: activeChildId,
-        recurso_id: (isManual || !isValidUUID) ? null : recursoId,
+        recurso_id: isManual ? null : (isValidUUID ? recursoId : null),
+        loop_config_id: isManual ? recursoId : null,
         tipo_atividade: tipo,
-        semana_inicio: loopConfig.semana_inicio,
+        semana_inicio: loopConfig.semana_inicio || loopConfig.semana_referencia,
         status: 'concluido',
         data_conclusao: new Date().toISOString()
       };
@@ -4266,6 +4284,7 @@ const AlunosPaisPage = () => {
           aluno_id: activeChildId,
           familia_id: user.id,
           semana_inicio: loopConfig?.semana_inicio || null,
+          loop_config_id: loopConfig?.loop_config_id || null,
           engajamento: reflection.engajamento,
           comentario: reflection.comentario
         }]);
@@ -4748,11 +4767,12 @@ const AlunosPaisPage = () => {
                               setIsActivityModalOpen(true);
                             } else if (station.id === 'missao' && loopConfig?.missao_titulo) {
                               setSelectedActivity({
-                                id: 'missao-manual',
+                                id: loopConfig.loop_config_id,
                                 titulo: loopConfig.missao_titulo,
                                 descricao: loopConfig.missao_prompt || 'Realize a atividade cultural proposta pelo seu tutor.',
                                 tipo: 'missao',
-                                miniatura_url: 'https://images.unsplash.com/photo-1523050853063-bd8012fec4c8?auto=format&fit=crop&q=80&w=800'
+                                miniatura_url: 'https://images.unsplash.com/photo-1523050853063-bd8012fec4c8?auto=format&fit=crop&q=80&w=800',
+                                isManual: true
                               });
                               setIsActivityModalOpen(true);
                             }
@@ -4898,7 +4918,7 @@ const AlunosPaisPage = () => {
                       <div className="space-y-4">
                         <button 
                           onClick={() => {
-                            handleCompleteActivity(selectedActivity.id, selectedActivity.tipo);
+                            handleCompleteActivity(selectedActivity.id, selectedActivity.tipo, selectedActivity.isManual);
                             setIsActivityModalOpen(false);
                           }}
                           className="w-full py-5 bg-primary text-white rounded-3xl font-black text-lg uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-3"
@@ -5252,10 +5272,24 @@ const AlunosPaisPage = () => {
                   </p>
                   
                   {loopConfig?.missao_sexta_desbloqueada ? (
-                    <div className="bg-white/10 p-6 rounded-3xl border border-white/20 space-y-4">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-yellow-300" />
-                        <p className="text-sm font-black">✨ Missão Ativa: {loopConfig.missao_titulo || 'Mão na Massa!'}</p>
+                    <div className={cn(
+                      "p-6 rounded-3xl border space-y-4 transition-all",
+                      getStationStatus('missao') === 'completed' 
+                        ? "bg-white/20 border-white/40" 
+                        : "bg-white/10 border-white/20"
+                    )}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className={cn("w-4 h-4", getStationStatus('missao') === 'completed' ? "text-white" : "text-yellow-300")} />
+                          <p className="text-sm font-black">
+                            {getStationStatus('missao') === 'completed' ? '✅ Missão Concluída!' : `✨ Missão Ativa: ${loopConfig.missao_titulo || 'Mão na Massa!'}`}
+                          </p>
+                        </div>
+                        {getStationStatus('missao') === 'completed' && (
+                          <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-lg">
+                            Sucesso
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm font-medium opacity-90 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/10">
                         {loopConfig.missao_prompt || 'Realize a atividade cultural proposta e envie sua reflexão abaixo.'}
@@ -5548,17 +5582,40 @@ const TutoresPage = () => {
     try {
       let query = supabase
         .from('execucoes_atividades')
-        .select('aluno_id, recurso_id, tipo_atividade, semana_inicio');
+        .select('aluno_id, recurso_id, loop_config_id, tipo_atividade, semana_inicio');
+
+      // Filtrar por aluno ou turma
+      if (selectedStudent) {
+        query = query.eq('aluno_id', selectedStudent.id);
+      } else if (selectedTurma) {
+        const studentIds = tutorStudents
+          .filter(s => s.turma_id === selectedTurma.id)
+          .map(s => s.id);
+        if (studentIds.length > 0) {
+          query = query.in('aluno_id', studentIds);
+        } else {
+          setLoopProgress({});
+          return;
+        }
+      }
 
       const orFilters = [];
       if (resourceIds.length > 0) {
         orFilters.push(`recurso_id.in.(${resourceIds.join(',')})`);
       }
-      if (hasManualMission) {
-        orFilters.push(`and(tipo_atividade.eq.missao,semana_inicio.eq.${weeklyLoop.semana_inicio})`);
+      
+      // Para missões manuais, filtramos pelo loop_config_id
+      if (hasManualMission && weeklyLoop.loop_config_id) {
+        orFilters.push(`loop_config_id.eq.${weeklyLoop.loop_config_id}`);
       }
 
-      const { data: executions } = await query.or(orFilters.join(','));
+      if (orFilters.length === 0) {
+        setLoopProgress({});
+        return;
+      }
+
+      const { data: executions, error: execError } = await query.or(orFilters.join(','));
+      if (execError) throw execError;
 
       const progress: Record<string, number> = {};
       const types = ['historia', 'jogo', 'tarefa', 'revisao', 'missao'];
@@ -5568,7 +5625,11 @@ const TutoresPage = () => {
         
         // Se for missão manual
         if (type === 'missao' && !resource?.id) {
-          const manualExecutions = executions?.filter(ex => ex.tipo_atividade === 'missao' && ex.semana_inicio === weeklyLoop.semana_inicio) || [];
+          const manualExecutions = executions?.filter(ex => 
+            ex.tipo_atividade === 'missao' && 
+            ex.semana_inicio === weeklyLoop.semana_inicio &&
+            ex.loop_config_id === weeklyLoop.loop_config_id
+          ) || [];
           if (selectedStudent) {
             const completed = manualExecutions.some(ex => ex.aluno_id === selectedStudent.id);
             progress[type] = completed ? 100 : 0;
@@ -5682,7 +5743,9 @@ const TutoresPage = () => {
           revisao_agendamento: activeConfig.revisao_agendamento || '',
           missao: activeConfig.missao,
           missao_agendamento: activeConfig.missao_agendamento || '',
-          liberadoAgora: activeConfig.liberacao_manual
+          liberadoAgora: activeConfig.liberacao_manual,
+          loop_config_id: extraConfig?.id,
+          semana_inicio: mondayStr
         });
 
         if (extraConfig) {
@@ -5814,9 +5877,9 @@ const TutoresPage = () => {
     try {
       const { data, error } = await supabase
         .from('execucoes_atividades')
-        .select('*, recurso:recurso_id(*)')
+        .select('*, recurso:recurso_id(*), loop_config:loop_config_id(*)')
         .eq('aluno_id', alunoId)
-        .order('criado_em', { ascending: false });
+        .order('data_conclusao', { ascending: false });
       
       if (error) throw error;
       setActivityExecutions(data || []);
@@ -6950,9 +7013,11 @@ const TutoresPage = () => {
                               <div className="flex justify-between items-start">
                                 <div className="space-y-1">
                                   <span className="text-[8px] font-black uppercase tracking-widest text-primary bg-primary/5 px-2 py-1 rounded-md">
-                                    {exec.tipo_etapa}
+                                    {exec.tipo_atividade}
                                   </span>
-                                  <h5 className="text-sm font-black text-secondary">{exec.recurso?.titulo}</h5>
+                                  <h5 className="text-sm font-black text-secondary">
+                                    {exec.recurso?.titulo || exec.loop_config?.missao_titulo || 'Atividade Sem Título'}
+                                  </h5>
                                 </div>
                                 <div className={cn(
                                   "px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest",
