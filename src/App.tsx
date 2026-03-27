@@ -3875,10 +3875,20 @@ const AlunosPaisPage = () => {
         .from('pais')
         .select('*')
         .eq('id', userId)
+        .is('deleted_at', null)
         .maybeSingle();
       
       if (fError) console.error("Erro ao buscar dados da família:", fError);
 
+      // Middleware de Status (Recomendação 1)
+      if (family && family.status !== 'ativo') {
+        toast.error("Sua conta está suspensa ou inativa. Entre em contato com o suporte.");
+        await supabase.auth.signOut();
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+      
       if (!family) {
         console.log("Registro de responsável não encontrado por ID. Verificando por e-mail...");
         const { data: userData } = await supabase.auth.getUser();
@@ -3939,7 +3949,8 @@ const AlunosPaisPage = () => {
       const { data: childProfiles, error: pError } = await supabase
         .from('alunos')
         .select('*')
-        .eq('parent_id', userId);
+        .eq('parent_id', userId)
+        .is('deleted_at', null);
       
       if (pError) {
         console.error("Erro ao buscar perfis de alunos:", pError);
@@ -5944,13 +5955,37 @@ const TutoresPage = () => {
 
   const fetchLibrary = async () => {
     try {
-      const { data, error } = await supabase
+      // 1. Buscar recursos públicos (biblioteca geral)
+      const { data: publicResources, error: pError } = await supabase
         .from('biblioteca_recursos')
         .select('*')
         .order('titulo');
       
-      if (error) throw error;
-      if (data) setBiblioteca(data);
+      if (pError) throw pError;
+
+      // 2. Buscar recursos adquiridos (Entitlements - Recomendação 3)
+      let purchasedResources: any[] = [];
+      if (selectedChild) {
+        const { data: assets, error: aError } = await supabase
+          .from('aluno_assets')
+          .select('*, recurso:recurso_id(*)')
+          .eq('aluno_id', selectedChild.id);
+        
+        if (aError) console.error('Error fetching student assets:', aError);
+        if (assets) {
+          purchasedResources = assets.map((a: any) => a.recurso).filter(Boolean);
+        }
+      }
+      
+      // Combinar e remover duplicatas
+      const combined = [...(publicResources || [])];
+      purchasedResources.forEach(pr => {
+        if (!combined.find(c => c.id === pr.id)) {
+          combined.push(pr);
+        }
+      });
+
+      setBiblioteca(combined);
     } catch (err) {
       console.error('Error fetching library:', err);
     }
@@ -6008,7 +6043,8 @@ const TutoresPage = () => {
       const { data: turmasData } = await supabase
         .from('turmas')
         .select('*')
-        .eq('tutor_id', tutorData.id);
+        .eq('tutor_id', tutorData.id)
+        .is('deleted_at', null);
       
       if (turmasData) setTurmas(turmasData);
 
@@ -6019,7 +6055,8 @@ const TutoresPage = () => {
       
       let query = supabase
         .from('alunos')
-        .select('*, pais(*), turmas(nome, tutor_id)');
+        .select('*, pais(*), turmas(nome, tutor_id)')
+        .is('deleted_at', null);
 
       if (turmaIds.length > 0) {
         query = query.or(`tutor_id.eq.${tutorData.id},turma_id.in.(${turmaIds.join(',')})`);
@@ -6197,6 +6234,7 @@ const TutoresPage = () => {
           .from('tutores')
           .select('*')
           .eq('user_id', authData.user.id)
+          .is('deleted_at', null)
           .maybeSingle();
 
         if (tutorError || !tutor) {
