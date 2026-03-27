@@ -4239,14 +4239,21 @@ const AlunosPaisPage = () => {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       const isValidUUID = uuidRegex.test(recursoId);
 
+      // Determinar origem (turma ou individual)
+      const isIndividual = !!loopConfig.aluno_id;
+
       const insertData = {
         aluno_id: activeChildId,
         recurso_id: isManual ? null : (isValidUUID ? recursoId : null),
-        loop_config_id: isManual ? recursoId : null,
+        loop_config_id: isManual ? recursoId : (loopConfig.loop_config_id || null),
         tipo_atividade: tipo,
         semana_inicio: loopConfig.semana_inicio || loopConfig.semana_referencia,
         status: 'concluido',
-        data_conclusao: new Date().toISOString()
+        data_conclusao: new Date().toISOString(),
+        // Snapshots históricos
+        missao_titulo_snapshot: tipo === 'missao' ? (loopConfig.missao_titulo || loopConfig.missao?.titulo) : null,
+        missao_prompt_snapshot: tipo === 'missao' ? (loopConfig.missao_prompt || loopConfig.missao?.descricao) : null,
+        origem_atribuicao: isIndividual ? 'individual' : 'turma'
       };
 
       console.log('Inserting activity execution:', insertData);
@@ -4273,6 +4280,17 @@ const AlunosPaisPage = () => {
     e.preventDefault();
     if (!activeChildId || !user?.id) {
       alert('Sessão expirada ou aluno não selecionado. Por favor, faça login novamente.');
+      return;
+    }
+
+    // Trava de segurança: Só permite reflexão se a missão da semana estiver concluída
+    const isMissionCompleted = childExecutions.some(ex => 
+      ex.tipo_atividade === 'missao' && 
+      ex.semana_inicio === (loopConfig?.semana_inicio || loopConfig?.semana_referencia)
+    );
+
+    if (!isMissionCompleted) {
+      alert('Atenção: A reflexão da família deve ser enviada após o aluno concluir a missão semanal. 🚀');
       return;
     }
 
@@ -4326,6 +4344,14 @@ const AlunosPaisPage = () => {
       if (!authError && authData.user) {
         console.log("Login via Auth bem-sucedido");
         setUser(authData.user);
+        
+        // Audit Log
+        await supabase.from('audit_logs').insert([{
+          user_id: authData.user.id,
+          action: 'login',
+          details: { email: data.email, timestamp: new Date().toISOString() }
+        }]);
+
         await syncDataAndNavigate(authData.user.id);
         return;
       }
@@ -5220,7 +5246,7 @@ const AlunosPaisPage = () => {
                 </div>
               </div>
 
-              {/* Feedback Reports */}
+              {/* Feedback Reports & Activity Timeline */}
               <div className="lg:col-span-2 space-y-8">
                 <div className="bg-gray-50 rounded-[40px] p-8 md:p-12">
                   <div className="flex items-center gap-4 mb-8">
@@ -5256,6 +5282,59 @@ const AlunosPaisPage = () => {
                     )}
                   </div>
                 </div>
+
+                {/* Activity Timeline with specific feedbacks */}
+                <div className="bg-white rounded-[40px] p-8 md:p-12 border border-gray-100 shadow-sm">
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
+                      <History className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-secondary tracking-tight">Linha do Tempo</h3>
+                      <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Atividades e feedbacks específicos</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {childExecutions
+                      .sort((a, b) => new Date(b.data_conclusao).getTime() - new Date(a.data_conclusao).getTime())
+                      .slice(0, 5)
+                      .map((ex) => (
+                      <div key={ex.id} className="flex gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-all border border-transparent hover:border-gray-100">
+                        <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          {ex.tipo_atividade === 'historia' && <BookOpen className="w-5 h-5 text-blue-500" />}
+                          {ex.tipo_atividade === 'jogo' && <Gamepad2 className="w-5 h-5 text-purple-500" />}
+                          {ex.tipo_atividade === 'tarefa' && <FileText className="w-5 h-5 text-orange-500" />}
+                          {ex.tipo_atividade === 'revisao' && <RefreshCw className="w-5 h-5 text-green-500" />}
+                          {ex.tipo_atividade === 'missao' && <Package className="w-5 h-5 text-primary" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start">
+                            <h5 className="font-black text-secondary text-sm truncate uppercase tracking-tight">
+                              {ex.missao_titulo_snapshot || ex.tipo_atividade}
+                            </h5>
+                            <span className="text-[10px] font-bold text-secondary/30 whitespace-nowrap">
+                              {new Date(ex.data_conclusao).toLocaleDateString('pt-BR')}
+                            </span>
+                          </div>
+                          {ex.feedback_tutor && (
+                            <div className="mt-2 p-3 bg-primary/5 rounded-xl border border-primary/10">
+                              <p className="text-xs text-primary font-bold leading-relaxed">
+                                <span className="uppercase text-[8px] tracking-widest opacity-60 block mb-1">Feedback do Tutor:</span>
+                                {ex.feedback_tutor}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {childExecutions.length === 0 && (
+                      <div className="text-center py-10">
+                        <p className="text-secondary/40 font-bold uppercase tracking-widest text-xs">Nenhuma atividade registrada</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Mission Center & Reflection */}
@@ -5282,7 +5361,9 @@ const AlunosPaisPage = () => {
                         <div className="flex items-center gap-2">
                           <Sparkles className={cn("w-4 h-4", getStationStatus('missao') === 'completed' ? "text-white" : "text-yellow-300")} />
                           <p className="text-sm font-black">
-                            {getStationStatus('missao') === 'completed' ? '✅ Missão Concluída!' : `✨ Missão Ativa: ${loopConfig.missao_titulo || 'Mão na Massa!'}`}
+                            {getStationStatus('missao') === 'completed' 
+                              ? '✅ Missão Concluída!' 
+                              : `✨ Missão Ativa: ${loopConfig.missao_titulo || loopConfig.missao?.titulo || 'Mão na Massa!'}`}
                           </p>
                         </div>
                         {getStationStatus('missao') === 'completed' && (
@@ -5292,7 +5373,9 @@ const AlunosPaisPage = () => {
                         )}
                       </div>
                       <p className="text-sm font-medium opacity-90 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/10">
-                        {loopConfig.missao_prompt || 'Realize a atividade cultural proposta e envie sua reflexão abaixo.'}
+                        {getStationStatus('missao') === 'completed' 
+                          ? (childExecutions.find(ex => ex.tipo_atividade === 'missao' && ex.semana_inicio === (loopConfig.semana_inicio || loopConfig.semana_referencia))?.missao_titulo_snapshot || loopConfig.missao_prompt || 'Missão realizada com sucesso!')
+                          : (loopConfig.missao_prompt || loopConfig.missao?.descricao || 'Realize a atividade cultural proposta e envie sua reflexão abaixo.')}
                       </p>
                     </div>
                   ) : (
@@ -6102,6 +6185,13 @@ const TutoresPage = () => {
       }
 
       if (authData.user) {
+        // Audit Log
+        await supabase.from('audit_logs').insert([{
+          user_id: authData.user.id,
+          action: 'login_tutor',
+          details: { email, timestamp: new Date().toISOString() }
+        }]);
+
         // Buscar dados do tutor
         const { data: tutor, error: tutorError } = await supabase
           .from('tutores')
@@ -7790,8 +7880,18 @@ const ResetPasswordPage = () => {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      const { data, error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
+      
+      // Audit Log
+      if (data.user) {
+        await supabase.from('audit_logs').insert([{
+          user_id: data.user.id,
+          action: 'password_reset',
+          details: { timestamp: new Date().toISOString() }
+        }]);
+      }
+
       toast.success("Senha atualizada com sucesso!");
       navigate('/alunos-pais');
     } catch (err: any) {
