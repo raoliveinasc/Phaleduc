@@ -6091,6 +6091,7 @@ const TutoresPage = () => {
         aluno_id: selectedStudent?.id || null,
         tutor_id: tutorData?.id || null,
         semana_referencia: mondayStr,
+        semana_inicio: mondayStr,
         historia_id: updatedLoop.historia?.id || null,
         historia_agendamento: updatedLoop.historia_agendamento || null,
         jogo_id: updatedLoop.jogo?.id || null,
