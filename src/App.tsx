@@ -79,6 +79,7 @@ import {
   RefreshCw,
   Loader2,
   Minus,
+  History,
   AlertCircle
 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
@@ -3764,6 +3765,10 @@ const AlunosPaisPage = () => {
   const [selectedChild, setSelectedChild] = useState<any | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+  const [isReflectionModalOpen, setIsReflectionModalOpen] = useState(false);
+  const [studentReflection, setStudentReflection] = useState('');
+  const [studentFeeling, setStudentFeeling] = useState<'feliz' | 'neutro' | 'desafiado' | null>(null);
+  const [isCompleting, setIsCompleting] = useState(false);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -4243,7 +4248,8 @@ const AlunosPaisPage = () => {
   const handleCompleteActivity = async (recursoId: string, tipo: string, isManual?: boolean) => {
     if (!activeChildId || !loopConfig) return;
 
-    console.log('Completing activity:', { recursoId, tipo, activeChildId, isManual });
+    setIsCompleting(true);
+    console.log('Completing activity:', { recursoId, tipo, activeChildId, isManual, studentReflection, studentFeeling });
 
     try {
       // UUID validation regex
@@ -4261,6 +4267,8 @@ const AlunosPaisPage = () => {
         semana_inicio: loopConfig.semana_inicio || loopConfig.semana_referencia,
         status: 'concluido',
         data_conclusao: new Date().toISOString(),
+        reflexao_aluno: studentReflection,
+        sentimento_aluno: studentFeeling,
         // Snapshots históricos
         missao_titulo_snapshot: tipo === 'missao' ? (loopConfig.missao_titulo || loopConfig.missao?.titulo) : null,
         missao_prompt_snapshot: tipo === 'missao' ? (loopConfig.missao_prompt || loopConfig.missao?.descricao) : null,
@@ -4280,10 +4288,16 @@ const AlunosPaisPage = () => {
 
       // Atualizar lista local
       fetchChildData(activeChildId);
-      alert('Parabéns! Atividade concluída com sucesso! 🌟');
+      setIsReflectionModalOpen(false);
+      setIsActivityModalOpen(false);
+      setStudentReflection('');
+      setStudentFeeling(null);
+      toast.success('Parabéns! Atividade concluída com sucesso! 🌟');
     } catch (error) {
       console.error('Erro ao concluir atividade:', error);
-      alert('Erro ao registrar conclusão da atividade.');
+      toast.error('Erro ao registrar conclusão da atividade.');
+    } finally {
+      setIsCompleting(false);
     }
   };
 
@@ -4715,8 +4729,33 @@ const AlunosPaisPage = () => {
             initial={{ opacity: 0, x: 100 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -100 }}
-            className="min-h-[calc(100vh-112px)] flex flex-col lg:flex-row"
+            className="min-h-[calc(100vh-112px)] flex flex-col lg:flex-row relative"
           >
+            {/* Subscription Paywall Overlay */}
+            {!subscription && !checkingSubscription && (
+              <div className="fixed inset-0 z-[150] bg-secondary/95 backdrop-blur-xl flex items-center justify-center p-8 text-center">
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="max-w-md bg-white rounded-[48px] p-12 shadow-2xl space-y-8"
+                >
+                  <div className="w-24 h-24 bg-amber-100 rounded-full flex items-center justify-center mx-auto text-amber-600">
+                    <Lock className="w-12 h-12" />
+                  </div>
+                  <h3 className="text-3xl font-black text-secondary tracking-tighter">Próxima Temporada Bloqueada!</h3>
+                  <p className="text-secondary/60 font-medium leading-relaxed">
+                    A aventura de {selectedChild.nome} precisa de uma nova liberação dos pais para continuar. Peça para eles verificarem a assinatura no Modo Família!
+                  </p>
+                  <button 
+                    onClick={() => setView('profiles')}
+                    className="w-full py-4 bg-primary text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all"
+                  >
+                    Voltar para Perfis
+                  </button>
+                </motion.div>
+              </div>
+            )}
+
             {/* Sidebar - Backpack */}
             <aside className="w-full lg:w-80 bg-brand-green/30 border-r border-secondary/5 p-8 flex flex-col gap-8 order-2 lg:order-1">
               <div className="flex items-center gap-4 mb-4">
@@ -4783,77 +4822,95 @@ const AlunosPaisPage = () => {
                 </svg>
 
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-8 md:gap-4">
-                  {WEEKLY_STATIONS.map((station, i) => {
-                    const status = getStationStatus(station.id);
-                    const resource = loopConfig?.[station.id];
-                    const agendamento = loopConfig?.[`${station.id}_agendamento`];
+                  {(() => {
+                    const daysOrder = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+                    const getDayName = (dateStr: string | null | undefined, defaultDay: string) => {
+                      if (!dateStr) return defaultDay;
+                      try {
+                        const date = new Date(dateStr);
+                        if (isNaN(date.getTime())) return defaultDay;
+                        const days = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+                        return days[date.getDay()];
+                      } catch { return defaultDay; }
+                    };
 
-                    return (
-                      <div 
-                        key={station.day} 
-                        className={cn(
-                          "flex flex-col items-center gap-4",
-                          i % 2 === 0 ? "md:translate-y-12" : "md:-translate-y-12"
-                        )}
-                      >
-                        <button 
-                          disabled={status === 'locked' || status === 'scheduled'}
-                          onClick={() => {
-                            if (resource) {
-                              setSelectedActivity({ ...resource, tipo: station.id });
-                              setIsActivityModalOpen(true);
-                            } else if (station.id === 'missao' && loopConfig?.missao_titulo) {
-                              setSelectedActivity({
-                                id: loopConfig.loop_config_id,
-                                titulo: loopConfig.missao_titulo,
-                                descricao: loopConfig.missao_prompt || 'Realize a atividade cultural proposta pelo seu tutor.',
-                                tipo: 'missao',
-                                miniatura_url: 'https://images.unsplash.com/photo-1523050853063-bd8012fec4c8?auto=format&fit=crop&q=80&w=800',
-                                isManual: true
-                              });
-                              setIsActivityModalOpen(true);
-                            }
-                          }}
+                    const dynamicStations = WEEKLY_STATIONS.map(station => {
+                      const agendamento = loopConfig?.[`${station.id}_agendamento`];
+                      return { ...station, day: getDayName(agendamento, station.day) };
+                    }).sort((a, b) => daysOrder.indexOf(a.day) - daysOrder.indexOf(b.day));
+
+                    return dynamicStations.map((station, i) => {
+                      const status = getStationStatus(station.id);
+                      const resource = loopConfig?.[station.id];
+                      const agendamento = loopConfig?.[`${station.id}_agendamento`];
+
+                      return (
+                        <div 
+                          key={station.id} 
                           className={cn(
-                            "w-24 h-24 md:w-32 md:h-32 rounded-full shadow-2xl flex flex-col items-center justify-center text-white transition-all hover:scale-110 active:scale-95 relative group",
-                            status === 'locked' ? "bg-gray-300 grayscale cursor-not-allowed" : 
-                            status === 'scheduled' ? "bg-amber-400 grayscale-[0.5] cursor-wait" :
-                            status === 'completed' ? "bg-green-500" : station.color,
-                            station.special && status !== 'locked' && "animate-bounce"
+                            "flex flex-col items-center gap-4",
+                            i % 2 === 0 ? "md:translate-y-12" : "md:-translate-y-12"
                           )}
                         >
-                          {status === 'completed' ? (
-                            <Check className="w-10 h-10 md:w-12 md:h-12 mb-1" />
-                          ) : status === 'scheduled' ? (
-                            <Clock className="w-10 h-10 md:w-12 md:h-12 mb-1" />
-                          ) : (
-                            <station.icon className="w-10 h-10 md:w-12 md:h-12 mb-1" />
-                          )}
-                          <span className="text-[10px] font-black uppercase tracking-widest">
-                            {status === 'completed' ? 'Concluído' : station.label}
-                          </span>
-                          
-                          {/* Tooltip/Desc */}
-                          <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 bg-secondary text-white text-[10px] px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-bold z-20">
-                            {status === 'locked' ? 'Aguardando Tutor' : 
-                             status === 'scheduled' ? `Libera em: ${new Date(agendamento).toLocaleString()}` :
-                             resource?.titulo || station.desc}
-                          </div>
-
-                          {/* Status Badge */}
-                          {status === 'available' && (
-                            <div className="absolute -top-2 -right-2 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center shadow-lg animate-pulse">
-                              <Play className="w-4 h-4 fill-current" />
+                          <button 
+                            disabled={status === 'locked' || status === 'scheduled'}
+                            onClick={() => {
+                              if (resource) {
+                                setSelectedActivity({ ...resource, tipo: station.id });
+                                setIsActivityModalOpen(true);
+                              } else if (station.id === 'missao' && loopConfig?.missao_titulo) {
+                                setSelectedActivity({
+                                  id: loopConfig.loop_config_id,
+                                  titulo: loopConfig.missao_titulo,
+                                  descricao: loopConfig.missao_prompt || 'Realize a atividade cultural proposta pelo seu tutor.',
+                                  tipo: 'missao',
+                                  miniatura_url: 'https://images.unsplash.com/photo-1523050853063-bd8012fec4c8?auto=format&fit=crop&q=80&w=800',
+                                  isManual: true
+                                });
+                                setIsActivityModalOpen(true);
+                              }
+                            }}
+                            className={cn(
+                              "w-24 h-24 md:w-32 md:h-32 rounded-full shadow-2xl flex flex-col items-center justify-center text-white transition-all hover:scale-110 active:scale-95 relative group",
+                              status === 'locked' ? "bg-gray-300 grayscale cursor-not-allowed" : 
+                              status === 'scheduled' ? "bg-amber-400 grayscale-[0.5] cursor-wait" :
+                              status === 'completed' ? "bg-green-500" : station.color,
+                              station.special && status !== 'locked' && "animate-bounce"
+                            )}
+                          >
+                            {status === 'completed' ? (
+                              <Check className="w-10 h-10 md:w-12 md:h-12 mb-1" />
+                            ) : status === 'scheduled' ? (
+                              <Clock className="w-10 h-10 md:w-12 md:h-12 mb-1" />
+                            ) : (
+                              <station.icon className="w-10 h-10 md:w-12 md:h-12 mb-1" />
+                            )}
+                            <span className="text-[10px] font-black uppercase tracking-widest">
+                              {status === 'completed' ? 'Concluído' : station.label}
+                            </span>
+                            
+                            {/* Tooltip/Desc */}
+                            <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 bg-secondary text-white text-[10px] px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-bold z-20">
+                              {status === 'locked' ? 'Aguardando Tutor' : 
+                               status === 'scheduled' ? `Libera em: ${new Date(agendamento).toLocaleString()}` :
+                               resource?.titulo || station.desc}
                             </div>
-                          )}
-                        </button>
-                        <div className="text-center">
-                          <span className="block text-sm font-black text-secondary uppercase tracking-widest">{station.day}</span>
-                          <div className="w-2 h-2 bg-gray-200 rounded-full mx-auto mt-2" />
+
+                            {/* Status Badge */}
+                            {status === 'available' && (
+                              <div className="absolute -top-2 -right-2 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center shadow-lg animate-pulse">
+                                <Play className="w-4 h-4 fill-current" />
+                              </div>
+                            )}
+                          </button>
+                          <div className="text-center">
+                            <span className="block text-sm font-black text-secondary uppercase tracking-widest">{station.day}</span>
+                            <div className="w-2 h-2 bg-gray-200 rounded-full mx-auto mt-2" />
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 
@@ -4865,6 +4922,72 @@ const AlunosPaisPage = () => {
                   ) : (
                     <><Pencil className="w-4 h-4" /> Foco em Autonomia e Escrita</>
                   )}
+                </div>
+              </div>
+
+              {/* My Treasures Section */}
+              <div className="w-full max-w-7xl mt-20">
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600">
+                    <ShoppingBag className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-secondary tracking-tight">Meus Tesouros</h3>
+                    <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Materiais extras adquiridos</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                  {/* Fetching student assets */}
+                  {(() => {
+                    const [assets, setAssets] = useState<any[]>([]);
+                    const [loadingAssets, setLoadingAssets] = useState(true);
+
+                    useEffect(() => {
+                      const fetchAssets = async () => {
+                        if (!selectedChild?.id) return;
+                        const { data } = await supabase
+                          .from('aluno_assets')
+                          .select('*, recurso:recurso_id(*)')
+                          .eq('aluno_id', selectedChild.id);
+                        if (data) setAssets(data.map(a => a.recurso).filter(Boolean));
+                        setLoadingAssets(false);
+                      };
+                      fetchAssets();
+                    }, [selectedChild?.id]);
+
+                    if (loadingAssets) return <div className="col-span-full py-12 text-center text-secondary/20">Carregando tesouros...</div>;
+
+                    if (assets.length === 0) return (
+                      <div className="col-span-full py-12 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-center">
+                        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-gray-200 mb-4">
+                          <Package className="w-8 h-8" />
+                        </div>
+                        <p className="text-secondary/40 font-bold text-sm">Sua biblioteca está vazia.<br/>Peça para seus pais novos tesouros na loja!</p>
+                      </div>
+                    );
+
+                    return assets.map((asset) => (
+                      <button
+                        key={asset.id}
+                        onClick={() => {
+                          setSelectedActivity(asset);
+                          setIsActivityModalOpen(true);
+                        }}
+                        className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left group"
+                      >
+                        <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gray-100">
+                          <img 
+                            src={asset.miniatura_url || "https://picsum.photos/seed/treasure/400/400"} 
+                            className="w-full h-full object-cover group-hover:scale-110 transition-all"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                        <h4 className="text-xs font-black text-secondary line-clamp-2 leading-tight">{asset.titulo}</h4>
+                        <span className="text-[8px] font-black uppercase tracking-widest text-primary mt-2 block">{asset.categoria}</span>
+                      </button>
+                    ));
+                  })()}
                 </div>
               </div>
             </main>
@@ -4954,10 +5077,7 @@ const AlunosPaisPage = () => {
 
                       <div className="space-y-4">
                         <button 
-                          onClick={() => {
-                            handleCompleteActivity(selectedActivity.id, selectedActivity.tipo, selectedActivity.isManual);
-                            setIsActivityModalOpen(false);
-                          }}
+                          onClick={() => setIsReflectionModalOpen(true)}
                           className="w-full py-5 bg-primary text-white rounded-3xl font-black text-lg uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-3"
                         >
                           <CheckCircle2 className="w-6 h-6" /> Concluir Atividade
@@ -4966,6 +5086,75 @@ const AlunosPaisPage = () => {
                           Ao concluir, você ganhará 100 pontos de XP!
                         </p>
                       </div>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
+            {/* Reflection Modal */}
+            <AnimatePresence>
+              {isReflectionModalOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-secondary/90 backdrop-blur-xl"
+                  />
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="bg-white w-full max-w-lg rounded-[48px] p-10 shadow-2xl relative z-10 text-center"
+                  >
+                    <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-8">
+                      <Sparkles className="w-12 h-12 text-primary" />
+                    </div>
+                    <h3 className="text-3xl font-black text-secondary mb-4 tracking-tighter">Como foi sua aventura?</h3>
+                    <p className="text-secondary/50 font-medium mb-8">Conte para o seu tutor o que você achou!</p>
+                    
+                    <div className="flex justify-center gap-6 mb-8">
+                      {[
+                        { id: 'feliz', icon: '😊', label: 'Divertido' },
+                        { id: 'neutro', icon: '😐', label: 'Normal' },
+                        { id: 'desafiado', icon: '🤯', label: 'Difícil' }
+                      ].map(f => (
+                        <button
+                          key={f.id}
+                          onClick={() => setStudentFeeling(f.id as any)}
+                          className={cn(
+                            "flex flex-col items-center gap-2 p-4 rounded-3xl transition-all border-2",
+                            studentFeeling === f.id ? "bg-primary/5 border-primary scale-110" : "bg-gray-50 border-transparent grayscale hover:grayscale-0"
+                          )}
+                        >
+                          <span className="text-4xl">{f.icon}</span>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-secondary/40">{f.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <textarea 
+                      value={studentReflection}
+                      onChange={(e) => setStudentReflection(e.target.value)}
+                      placeholder="Escreva ou grave uma mensagem..."
+                      className="w-full p-6 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-primary/20 transition-all font-medium mb-8 h-32 resize-none"
+                    />
+
+                    <div className="flex gap-4">
+                      <button 
+                        onClick={() => setIsReflectionModalOpen(false)}
+                        className="flex-1 py-4 text-secondary/40 font-black uppercase tracking-widest text-xs hover:text-secondary transition-all"
+                      >
+                        Voltar
+                      </button>
+                      <button 
+                        disabled={!studentFeeling || isCompleting}
+                        onClick={() => handleCompleteActivity(selectedActivity.id, selectedActivity.tipo, selectedActivity.isManual)}
+                        className="flex-[2] py-4 bg-primary text-white rounded-2xl font-black text-sm shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+                      >
+                        {isCompleting ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Enviar Feedback!'}
+                      </button>
                     </div>
                   </motion.div>
                 </div>
@@ -5965,11 +6154,11 @@ const TutoresPage = () => {
 
       // 2. Buscar recursos adquiridos (Entitlements - Recomendação 3)
       let purchasedResources: any[] = [];
-      if (selectedChild) {
+      if (selectedStudent) {
         const { data: assets, error: aError } = await supabase
           .from('aluno_assets')
           .select('*, recurso:recurso_id(*)')
-          .eq('aluno_id', selectedChild.id);
+          .eq('aluno_id', selectedStudent.id);
         
         if (aError) console.error('Error fetching student assets:', aError);
         if (assets) {
@@ -6675,27 +6864,41 @@ const TutoresPage = () => {
                     </div>
                   </div>
                 )}
-                {[
-                  { id: 1, title: 'História', icon: BookOpen, color: 'primary', day: 'Segunda', type: 'historia' },
-                  { id: 2, title: 'Jogo', icon: Gamepad2, color: 'success', day: 'Terça', type: 'jogo' },
-                  { id: 3, title: 'Tarefa', icon: Mic, color: 'warning', day: 'Quarta', type: 'tarefa' },
-                  { id: 4, title: 'Revisão', icon: Sparkles, color: 'primary', day: 'Quinta', type: 'revisao' },
-                  { id: 5, title: 'Missão', icon: Package, color: 'secondary', day: 'Sexta', type: 'missao' }
-                ].map((step) => {
-                  const resource = weeklyLoop[step.type];
-                  return (
-                    <div key={step.id} className="space-y-4">
-                      <div className="flex items-center justify-between px-2">
-                        <div className="flex items-center gap-2">
-                          <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center", step.color === 'primary' ? 'bg-primary/10' : step.color === 'success' ? 'bg-success/10' : step.color === 'warning' ? 'bg-warning/10' : 'bg-secondary/10')}>
-                            <step.icon className={cn("w-4 h-4", step.color === 'primary' ? 'text-primary' : step.color === 'success' ? 'text-success' : step.color === 'warning' ? 'text-warning' : 'text-secondary')} />
-                          </div>
-                          <div>
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary">{step.title}</h4>
-                            <p className="text-[9px] font-bold text-secondary/30 uppercase">{step.day}</p>
+                {(() => {
+                  const getDayName = (dateStr: string | null | undefined, defaultDay: string) => {
+                    if (!dateStr) return defaultDay;
+                    try {
+                      const date = new Date(dateStr);
+                      if (isNaN(date.getTime())) return defaultDay;
+                      const days = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+                      return days[date.getDay()];
+                    } catch { return defaultDay; }
+                  };
+
+                  return [
+                    { id: 1, title: 'História', icon: BookOpen, color: 'primary', day: 'Segunda', type: 'historia' },
+                    { id: 2, title: 'Jogo', icon: Gamepad2, color: 'success', day: 'Terça', type: 'jogo' },
+                    { id: 3, title: 'Tarefa', icon: Mic, color: 'warning', day: 'Quarta', type: 'tarefa' },
+                    { id: 4, title: 'Revisão', icon: Sparkles, color: 'primary', day: 'Quinta', type: 'revisao' },
+                    { id: 5, title: 'Missão', icon: Package, color: 'secondary', day: 'Sexta', type: 'missao' }
+                  ].map((step) => {
+                    const resource = weeklyLoop[step.type as keyof typeof weeklyLoop] as any;
+                    const agendamento = weeklyLoop[`${step.type}_agendamento` as keyof typeof weeklyLoop] as string;
+                    const dynamicDay = getDayName(agendamento, step.day);
+
+                    return (
+                      <div key={step.id} className="space-y-4">
+                        <div className="flex items-center justify-between px-2">
+                          <div className="flex items-center gap-2">
+                            <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center", step.color === 'primary' ? 'bg-primary/10' : step.color === 'success' ? 'bg-success/10' : step.color === 'warning' ? 'bg-warning/10' : 'bg-secondary/10')}>
+                              <step.icon className={cn("w-4 h-4", step.color === 'primary' ? 'text-primary' : step.color === 'success' ? 'text-success' : step.color === 'warning' ? 'text-warning' : 'text-secondary')} />
+                            </div>
+                            <div>
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-secondary">{step.title}</h4>
+                              <p className="text-[9px] font-bold text-secondary/30 uppercase">{dynamicDay}</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
                       <div className={cn(
                         "min-h-[280px] rounded-[32px] border-2 border-dashed p-4 flex flex-col transition-all",
@@ -6801,7 +7004,8 @@ const TutoresPage = () => {
                       </div>
                     </div>
                   );
-                })}
+                })
+              })()}
               </div>
               
               {/* Mission Details & Unlocks */}
@@ -7737,6 +7941,21 @@ const TutoresPage = () => {
               </div>
 
               <div className="space-y-6">
+                {/* Student Reflection (if exists) */}
+                {selectedExecution.reflexao_aluno && (
+                  <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-primary">Reflexão do Aluno:</span>
+                      <span className="text-2xl">
+                        {selectedExecution.sentimento_aluno === 'feliz' ? '😊' : 
+                         selectedExecution.sentimento_aluno === 'neutro' ? '😐' : 
+                         selectedExecution.sentimento_aluno === 'desafiado' ? '🤯' : ''}
+                      </span>
+                    </div>
+                    <p className="text-sm text-secondary/70 font-medium italic">"{selectedExecution.reflexao_aluno}"</p>
+                  </div>
+                )}
+
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <label className="text-xs font-black uppercase tracking-widest text-secondary/40">Pontuação (Estrelas)</label>
