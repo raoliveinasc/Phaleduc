@@ -133,6 +133,68 @@ const GALLERY_IMAGES = [
 
 // --- Components ---
 
+const StudentTreasures = ({ 
+  selectedChildId, 
+  setSelectedActivity, 
+  setIsActivityModalOpen 
+}: { 
+  selectedChildId: string | undefined, 
+  setSelectedActivity: (activity: any) => void, 
+  setIsActivityModalOpen: (isOpen: boolean) => void 
+}) => {
+  const [assets, setAssets] = useState<any[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(true);
+
+  useEffect(() => {
+    const fetchAssets = async () => {
+      if (!selectedChildId) return;
+      const { data } = await supabase
+        .from('aluno_assets')
+        .select('*, recurso:recurso_id(*)')
+        .eq('aluno_id', selectedChildId);
+      if (data) setAssets(data.map(a => a.recurso).filter(Boolean));
+      setLoadingAssets(false);
+    };
+    fetchAssets();
+  }, [selectedChildId]);
+
+  if (loadingAssets) return <div className="col-span-full py-12 text-center text-secondary/20">Carregando tesouros...</div>;
+
+  if (assets.length === 0) return (
+    <div className="col-span-full py-12 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-center">
+      <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-gray-200 mb-4">
+        <Package className="w-8 h-8" />
+      </div>
+      <p className="text-secondary/40 font-bold text-sm">Sua biblioteca está vazia.<br/>Peça para seus pais novos tesouros na loja!</p>
+    </div>
+  );
+
+  return (
+    <>
+      {assets.map((asset) => (
+        <button
+          key={asset.id}
+          onClick={() => {
+            setSelectedActivity(asset);
+            setIsActivityModalOpen(true);
+          }}
+          className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left group"
+        >
+          <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gray-100">
+            <img 
+              src={asset.miniatura_url || "https://picsum.photos/seed/treasure/400/400"} 
+              className="w-full h-full object-cover group-hover:scale-110 transition-all"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          <h4 className="text-xs font-black text-secondary line-clamp-2 leading-tight">{asset.titulo}</h4>
+          <span className="text-[8px] font-black uppercase tracking-widest text-primary mt-2 block">{asset.categoria}</span>
+        </button>
+      ))}
+    </>
+  );
+};
+
 interface ErrorBoundaryProps {
   children: ReactNode;
 }
@@ -3758,6 +3820,468 @@ const MaterialsView = ({ parentId, onBack }: { parentId: string, onBack: () => v
   );
 };
 
+const OrdersView = ({ 
+  orders, 
+  loadingOrders, 
+  onDownloadInvoice 
+}: { 
+  orders: any[], 
+  loadingOrders: boolean, 
+  onDownloadInvoice: (order: any) => void 
+}) => {
+  if (loadingOrders) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="bg-gray-50 rounded-[40px] p-20 text-center">
+        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-6 text-secondary/20 shadow-sm">
+          <ShoppingBag className="w-10 h-10" />
+        </div>
+        <h3 className="text-2xl font-black text-secondary mb-2">Nenhum pedido ainda</h3>
+        <p className="text-secondary/40 font-medium">Seus pedidos e assinaturas aparecerão aqui.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {orders.map((order) => (
+        <div key={order.id} className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm hover:shadow-md transition-all">
+          <div className="flex flex-col md:flex-row justify-between gap-8">
+            <div className="flex items-start gap-6">
+              <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-secondary">
+                <Package className="w-8 h-8" />
+              </div>
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <h4 className="text-xl font-black text-secondary">Pedido #{order.id.slice(0, 8).toUpperCase()}</h4>
+                  <span className={cn(
+                    "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
+                    order.status === 'paid' ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"
+                  )}>
+                    {order.status === 'paid' ? 'Pago' : 'Pendente'}
+                  </span>
+                </div>
+                <p className="text-sm text-secondary/40 font-medium mb-4">
+                  Realizado em {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                </p>
+                <div className="flex flex-wrap gap-4">
+                  {order.items?.map((item: any, idx: number) => (
+                    <div key={idx} className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
+                      <span className="text-xs font-bold text-secondary">{item.name}</span>
+                      <span className="text-[10px] font-black text-secondary/40">x{item.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col items-end justify-between gap-4">
+              <div className="text-right">
+                <p className="text-[10px] font-black text-secondary/40 uppercase tracking-widest mb-1">Total do Pedido</p>
+                <p className="text-3xl font-black text-secondary">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount)}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                {order.tracking_url && (
+                  <a 
+                    href={order.tracking_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 bg-secondary text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
+                  >
+                    <Truck className="w-4 h-4" /> Rastrear
+                  </a>
+                )}
+                <button 
+                  onClick={() => onDownloadInvoice(order)}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-secondary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition-all"
+                >
+                  <Download className="w-4 h-4" /> Invoice
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ParentDashboardView = ({
+  profiles,
+  activeChildId,
+  setActiveChildId,
+  childMetrics,
+  loopConfig,
+  getStationStatus,
+  childFeedback,
+  childExecutions,
+  reflection,
+  setReflection,
+  handleSaveReflection,
+  isSubmittingReflection
+}: {
+  profiles: any[],
+  activeChildId: string | null,
+  setActiveChildId: (id: string) => void,
+  childMetrics: any,
+  loopConfig: any,
+  getStationStatus: (stationId: string) => string,
+  childFeedback: any[],
+  childExecutions: any[],
+  reflection: any,
+  setReflection: (reflection: any) => void,
+  handleSaveReflection: (e: React.FormEvent) => void,
+  isSubmittingReflection: boolean
+}) => {
+  const activeChild = profiles.find(c => c.id === activeChildId);
+
+  return (
+    <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-12">
+      {/* Children List with Access Codes */}
+      <div className="lg:col-span-3 bg-gray-50 rounded-[40px] p-8 md:p-12">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-2xl font-black text-secondary tracking-tight">Seus Filhos</h3>
+              <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Clique para ver o acompanhamento individual</p>
+            </div>
+          </div>
+          <div className="bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100 flex items-center gap-2">
+            <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Total:</span>
+            <span className="font-black text-secondary">{profiles.length} {profiles.length === 1 ? 'Criança' : 'Crianças'}</span>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {profiles.map((child) => (
+            <button 
+              key={child.id} 
+              onClick={() => setActiveChildId(child.id)}
+              className={cn(
+                "bg-white p-6 rounded-3xl border transition-all flex items-center gap-4 text-left group relative overflow-hidden",
+                activeChildId === child.id 
+                  ? "border-primary ring-4 ring-primary/10 shadow-lg" 
+                  : "border-gray-100 shadow-sm hover:border-primary/30 hover:shadow-md"
+              )}
+            >
+              {activeChildId === child.id && (
+                <div className="absolute top-0 right-0 w-12 h-12 bg-primary text-white flex items-center justify-center rounded-bl-2xl">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+              )}
+              
+              <div className={cn(
+                "w-16 h-16 rounded-2xl flex items-center justify-center text-3xl transition-transform group-hover:scale-110",
+                activeChildId === child.id ? "bg-primary/10" : "bg-gray-50"
+              )}>
+                {child.avatar || '👶'}
+              </div>
+              <div className="flex-1">
+                <h4 className="font-black text-secondary">{child.nome}</h4>
+                <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">{child.nivel || 'Nível não definido'}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Código:</span>
+                  <code className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-black text-sm tracking-widest">
+                    {child.id.slice(0, 6).toUpperCase()}
+                  </code>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Stats Chart */}
+      <div className="lg:col-span-2 bg-gray-50 rounded-[40px] p-8 md:p-12">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-12">
+          <div>
+            <h3 className="text-2xl font-black text-secondary tracking-tight">
+              Desenvolvimento: {activeChild?.nome || 'Carregando...'}
+            </h3>
+            <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Análise de competências linguísticas</p>
+          </div>
+          <div className="flex gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-primary rounded-full" />
+              <span className="text-xs font-bold text-secondary/60">Progresso Atual</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="h-[400px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={childMetrics || PARENT_STATS}>
+              <PolarGrid stroke="#E5E7EB" />
+              <PolarAngleAxis dataKey="subject" tick={{ fill: '#232b4e', fontSize: 12, fontWeight: 900 }} />
+              <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+              <Radar
+                name="Progresso"
+                dataKey="A"
+                stroke="#76c06b"
+                fill="#76c06b"
+                fillOpacity={0.5}
+              />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8">
+          {(childMetrics || []).map((metric: any) => (
+            <div key={metric.subject} className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-black uppercase tracking-widest text-secondary/40">{metric.subject}</span>
+                <span className="text-[10px] font-black text-primary">N{Math.round((metric.A / 100) * 4)}</span>
+              </div>
+              <div className="h-2 bg-white rounded-full overflow-hidden border border-gray-100">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${metric.A}%` }}
+                  className="h-full bg-primary"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Weekly Loop Timeline */}
+      <div className="lg:col-span-3 bg-white rounded-[40px] p-8 md:p-12 border border-gray-100 shadow-sm">
+        <div className="flex items-center gap-4 mb-12">
+          <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600">
+            <RefreshCw className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-2xl font-black text-secondary tracking-tight">Jornada Semanal</h3>
+            <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Progresso nas estações de aprendizado</p>
+          </div>
+        </div>
+
+        <div className="relative">
+          {/* Timeline Line */}
+          <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-100 -translate-y-1/2 hidden md:block" />
+          
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-8 relative z-10">
+            {WEEKLY_STATIONS.map((station) => {
+              const status = getStationStatus(station.id);
+              return (
+                <div key={station.id} className="flex flex-col items-center gap-4">
+                  <div className={cn(
+                    "w-16 h-16 rounded-2xl flex items-center justify-center transition-all shadow-lg",
+                    status === 'completed' ? "bg-green-500 text-white" :
+                    status === 'locked' ? "bg-gray-100 text-secondary/20" :
+                    status === 'scheduled' ? "bg-amber-100 text-amber-600" :
+                    "bg-white text-secondary border-2 border-gray-100"
+                  )}>
+                    {status === 'completed' ? <Check className="w-8 h-8" /> : <station.icon className="w-8 h-8" />}
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-secondary/40 mb-1">{station.day}</p>
+                    <p className="font-black text-secondary text-xs">{station.label}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Tutor Feedback Reports */}
+      <div className="lg:col-span-2 bg-gray-50 rounded-[40px] p-8 md:p-12">
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+            <MessageSquare className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-2xl font-black text-secondary tracking-tight">Relatórios do Tutor</h3>
+            <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Feedbacks pedagógicos semanais</p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {childFeedback.length > 0 ? childFeedback.map((report) => (
+            <div key={report.id} className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h4 className="font-black text-secondary text-lg">Semana de {new Date(report.semana_inicio).toLocaleDateString('pt-BR')}</h4>
+                  <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">Enviado em {new Date(report.created_at).toLocaleDateString('pt-BR')}</p>
+                </div>
+                <div className="w-10 h-10 bg-primary/5 rounded-full flex items-center justify-center text-primary">
+                  <Quote className="w-5 h-5" />
+                </div>
+              </div>
+              <div className="space-y-6">
+                <div>
+                  <h5 className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">Desempenho Geral</h5>
+                  <p className="text-secondary/70 font-medium leading-relaxed">{report.conteudo}</p>
+                </div>
+                {report.orientacao_familia && (
+                  <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
+                    <h5 className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">Dica para a Família</h5>
+                    <p className="text-secondary/70 font-medium text-sm italic">"{report.orientacao_familia}"</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )) : (
+            <div className="bg-white/50 p-12 rounded-3xl border-2 border-dashed border-gray-200 text-center">
+              <p className="text-secondary/40 font-bold uppercase tracking-widest text-xs">Aguardando o primeiro relatório do tutor</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Activity Timeline */}
+      <div className="bg-white rounded-[40px] p-8 md:p-12 border border-gray-100 shadow-sm">
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-12 h-12 bg-secondary/5 rounded-2xl flex items-center justify-center text-secondary">
+            <History className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-secondary tracking-tight">Atividades</h3>
+            <p className="text-[10px] text-secondary/40 font-bold uppercase tracking-widest">Histórico de conclusões</p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {childExecutions.slice(0, 5).map((execution) => (
+            <div key={execution.id} className="flex gap-4 group">
+              <div className="flex flex-col items-center">
+                <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-secondary group-hover:bg-primary group-hover:text-white transition-all">
+                  {execution.tipo_atividade === 'historia' ? <BookOpen className="w-5 h-5" /> :
+                   execution.tipo_atividade === 'jogo' ? <Gamepad2 className="w-5 h-5" /> :
+                   execution.tipo_atividade === 'tarefa' ? <Pencil className="w-5 h-5" /> :
+                   execution.tipo_atividade === 'revisao' ? <RefreshCw className="w-5 h-5" /> :
+                   <Sparkles className="w-5 h-5" />}
+                </div>
+                <div className="w-0.5 h-full bg-gray-100 my-2" />
+              </div>
+              <div className="flex-1 pt-1">
+                <h5 className="font-black text-secondary text-sm leading-tight mb-1">{execution.tipo_atividade.toUpperCase()}</h5>
+                <p className="text-[10px] text-secondary/40 font-bold uppercase tracking-widest">
+                  {new Date(execution.data_conclusao).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            </div>
+          ))}
+          {childExecutions.length === 0 && (
+            <p className="text-center text-secondary/30 text-xs font-bold uppercase py-8">Nenhuma atividade concluída ainda</p>
+          )}
+        </div>
+      </div>
+
+      {/* Friday Mission Card & Reflection */}
+      <div className="lg:col-span-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          {/* Mission Card */}
+          <div className="bg-brand-green/20 rounded-[40px] p-12 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform" />
+            
+            <div className="relative z-10">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-primary shadow-xl">
+                  <Target className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-3xl font-black text-secondary tracking-tighter">Missão de Sexta</h3>
+                  <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">O grande desafio cultural</p>
+                </div>
+              </div>
+
+              {loopConfig?.missao_titulo ? (
+                <div className="space-y-6">
+                  <div className="bg-white/80 backdrop-blur p-8 rounded-[32px] border border-white shadow-sm">
+                    <h4 className="text-xl font-black text-secondary mb-4">{loopConfig.missao_titulo}</h4>
+                    <p className="text-secondary/60 font-medium leading-relaxed">{loopConfig.missao_prompt}</p>
+                  </div>
+                  
+                  <div className="flex items-center gap-4">
+                    {getStationStatus('missao') === 'completed' ? (
+                      <div className="flex items-center gap-3 text-green-600 font-black uppercase tracking-widest text-sm">
+                        <CheckCircle2 className="w-6 h-6" /> Missão Cumprida!
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 text-amber-600 font-black uppercase tracking-widest text-sm">
+                        <Clock className="w-6 h-6" /> Aguardando Conclusão do Aluno
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white/40 p-12 rounded-[32px] border-2 border-dashed border-secondary/10 text-center">
+                  <p className="text-secondary/40 font-bold uppercase tracking-widest text-xs">Aguardando definição do tutor para esta semana</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Family Reflection Form */}
+          <div className="bg-secondary rounded-[40px] p-12 text-white">
+            <div className="flex items-center gap-4 mb-8">
+              <div className="w-16 h-16 bg-white/10 rounded-3xl flex items-center justify-center text-white">
+                <Heart className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-3xl font-black tracking-tighter">Reflexão em Família</h3>
+                <p className="text-xs text-white/40 font-bold uppercase tracking-widest">Momento de conexão e feedback</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveReflection} className="space-y-6">
+              <div className="space-y-4">
+                <label className="text-xs font-black uppercase tracking-widest text-white/40 block">Nível de Engajamento</label>
+                <div className="flex justify-between gap-2">
+                  {[1, 2, 3, 4, 5].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setReflection({ ...reflection, engajamento: num })}
+                      className={cn(
+                        "w-12 h-12 rounded-xl font-black transition-all",
+                        reflection.engajamento === num ? "bg-primary text-white scale-110 shadow-lg" : "bg-white/10 text-white/40 hover:bg-white/20"
+                      )}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <label className="text-xs font-black uppercase tracking-widest text-white/40 block">Comentário ou Observação</label>
+                <textarea 
+                  value={reflection.comentario}
+                  onChange={(e) => setReflection({ ...reflection, comentario: e.target.value })}
+                  placeholder="Como foi a experiência da semana? Algum desafio ou conquista especial?"
+                  className="w-full p-6 bg-white/5 border-none rounded-3xl focus:ring-2 focus:ring-primary/50 transition-all font-medium h-32 resize-none placeholder:text-white/20"
+                />
+              </div>
+
+              <button 
+                type="submit"
+                disabled={isSubmittingReflection}
+                className="w-full py-5 bg-primary text-white rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-all shadow-xl shadow-primary/20 disabled:opacity-50"
+              >
+                {isSubmittingReflection ? 'Enviando...' : 'Enviar Reflexão'}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AlunosPaisPage = () => {
   const navigate = useNavigate();
   const [view, setView] = useState<'login' | 'register' | 'profiles' | 'child' | 'parent' | 'onboarding' | 'materials'>('login');
@@ -3790,6 +4314,7 @@ const AlunosPaisPage = () => {
   const [activeParentTab, setActiveParentTab] = useState<'dashboard' | 'orders'>('dashboard');
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [childExecutions, setChildExecutions] = useState<any[]>([]);
 
   const fetchOrders = async (userId: string) => {
     setLoadingOrders(true);
@@ -4055,9 +4580,7 @@ const AlunosPaisPage = () => {
     }
   }, [view, selectedChild?.id, activeChildId]);
 
-  const [childExecutions, setChildExecutions] = useState<any[]>([]);
-
-  const getMonday = (d: Date) => {
+  const getMonday = (d: Date | string) => {
     const date = new Date(d);
     const day = date.getDay();
     const diff = date.getDate() - day + (day === 0 ? -6 : 1);
@@ -4939,55 +5462,11 @@ const AlunosPaisPage = () => {
 
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
                   {/* Fetching student assets */}
-                  {(() => {
-                    const [assets, setAssets] = useState<any[]>([]);
-                    const [loadingAssets, setLoadingAssets] = useState(true);
-
-                    useEffect(() => {
-                      const fetchAssets = async () => {
-                        if (!selectedChild?.id) return;
-                        const { data } = await supabase
-                          .from('aluno_assets')
-                          .select('*, recurso:recurso_id(*)')
-                          .eq('aluno_id', selectedChild.id);
-                        if (data) setAssets(data.map(a => a.recurso).filter(Boolean));
-                        setLoadingAssets(false);
-                      };
-                      fetchAssets();
-                    }, [selectedChild?.id]);
-
-                    if (loadingAssets) return <div className="col-span-full py-12 text-center text-secondary/20">Carregando tesouros...</div>;
-
-                    if (assets.length === 0) return (
-                      <div className="col-span-full py-12 bg-gray-50 rounded-[40px] border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-center">
-                        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-gray-200 mb-4">
-                          <Package className="w-8 h-8" />
-                        </div>
-                        <p className="text-secondary/40 font-bold text-sm">Sua biblioteca está vazia.<br/>Peça para seus pais novos tesouros na loja!</p>
-                      </div>
-                    );
-
-                    return assets.map((asset) => (
-                      <button
-                        key={asset.id}
-                        onClick={() => {
-                          setSelectedActivity(asset);
-                          setIsActivityModalOpen(true);
-                        }}
-                        className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left group"
-                      >
-                        <div className="aspect-square rounded-2xl overflow-hidden mb-4 bg-gray-100">
-                          <img 
-                            src={asset.miniatura_url || "https://picsum.photos/seed/treasure/400/400"} 
-                            className="w-full h-full object-cover group-hover:scale-110 transition-all"
-                            referrerPolicy="no-referrer"
-                          />
-                        </div>
-                        <h4 className="text-xs font-black text-secondary line-clamp-2 leading-tight">{asset.titulo}</h4>
-                        <span className="text-[8px] font-black uppercase tracking-widest text-primary mt-2 block">{asset.categoria}</span>
-                      </button>
-                    ));
-                  })()}
+                  <StudentTreasures 
+                    selectedChildId={selectedChild?.id}
+                    setSelectedActivity={setSelectedActivity}
+                    setIsActivityModalOpen={setIsActivityModalOpen}
+                  />
                 </div>
               </div>
             </main>
@@ -5289,351 +5768,20 @@ const AlunosPaisPage = () => {
             </AnimatePresence>
 
             {activeParentTab === 'dashboard' ? (
-              <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-12">
-              {/* Children List with Access Codes */}
-              <div className="lg:col-span-3 bg-gray-50 rounded-[40px] p-8 md:p-12">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
-                      <Users className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-black text-secondary tracking-tight">Seus Filhos</h3>
-                      <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Clique para ver o acompanhamento individual</p>
-                    </div>
-                  </div>
-                  <div className="bg-white px-6 py-3 rounded-full shadow-sm border border-gray-100 flex items-center gap-2">
-                    <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Total:</span>
-                    <span className="font-black text-secondary">{profiles.length} {profiles.length === 1 ? 'Criança' : 'Crianças'}</span>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {profiles.map((child) => (
-                    <button 
-                      key={child.id} 
-                      onClick={() => setActiveChildId(child.id)}
-                      className={cn(
-                        "bg-white p-6 rounded-3xl border transition-all flex items-center gap-4 text-left group relative overflow-hidden",
-                        activeChildId === child.id 
-                          ? "border-primary ring-4 ring-primary/10 shadow-lg" 
-                          : "border-gray-100 shadow-sm hover:border-primary/30 hover:shadow-md"
-                      )}
-                    >
-                      {activeChildId === child.id && (
-                        <div className="absolute top-0 right-0 w-12 h-12 bg-primary text-white flex items-center justify-center rounded-bl-2xl">
-                          <CheckCircle2 className="w-5 h-5" />
-                        </div>
-                      )}
-                      
-                      <div className={cn(
-                        "w-16 h-16 rounded-2xl flex items-center justify-center text-3xl transition-transform group-hover:scale-110",
-                        activeChildId === child.id ? "bg-primary/10" : "bg-gray-50"
-                      )}>
-                        {child.avatar || '👶'}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-black text-secondary">{child.nome}</h4>
-                        <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">{child.nivel || 'Nível não definido'}</p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <span className="text-[10px] font-black text-secondary/40 uppercase tracking-widest">Código:</span>
-                          <code className="bg-primary/10 text-primary px-3 py-1 rounded-lg font-black text-sm tracking-widest">
-                            {child.id.slice(0, 6).toUpperCase()}
-                          </code>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Stats Chart */}
-              <div className="lg:col-span-2 bg-gray-50 rounded-[40px] p-8 md:p-12">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-12">
-                  <div>
-                    <h3 className="text-2xl font-black text-secondary tracking-tight">
-                      Desenvolvimento: {profiles.find(c => c.id === activeChildId)?.nome || 'Carregando...'}
-                    </h3>
-                    <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Análise de competências linguísticas</p>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-primary rounded-full" />
-                      <span className="text-xs font-bold text-secondary/60">Progresso Atual</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="h-[400px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={childMetrics || PARENT_STATS}>
-                      <PolarGrid stroke="#E5E7EB" />
-                      <PolarAngleAxis dataKey="subject" tick={{ fill: '#232b4e', fontSize: 12, fontWeight: 900 }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                      <Radar
-                        name="Progresso"
-                        dataKey="A"
-                        stroke="#76c06b"
-                        fill="#76c06b"
-                        fillOpacity={0.5}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8">
-                  {(childMetrics || []).map((metric: any) => (
-                    <div key={metric.subject} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-secondary/40">{metric.subject}</span>
-                        <span className="text-[10px] font-black text-primary">N{Math.round((metric.A / 100) * 4)}</span>
-                      </div>
-                      <div className="h-2 bg-white rounded-full overflow-hidden border border-gray-100">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${metric.A}%` }}
-                          className="h-full bg-primary"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Weekly Loop Timeline */}
-              <div className="lg:col-span-3 bg-white rounded-[40px] p-8 md:p-12 border border-gray-100 shadow-sm">
-                <div className="flex items-center gap-4 mb-10">
-                  <div className="w-12 h-12 bg-secondary/10 rounded-2xl flex items-center justify-center text-secondary">
-                    <Calendar className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-secondary tracking-tight">Loop Semanal</h3>
-                    <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Acompanhe o desbloqueio da trilha</p>
-                  </div>
-                </div>
-
-                <div className="space-y-8 relative">
-                  <div className="absolute left-6 top-0 bottom-0 w-1 bg-gray-100 -z-10" />
-                  
-                  {WEEKLY_STATIONS.map((station) => {
-                    const status = getStationStatus(station.id);
-                    const isUnlocked = status !== 'locked';
-                    
-                    return (
-                      <div key={station.id} className="flex items-center gap-6">
-                        <div className={cn(
-                          "w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-lg",
-                          isUnlocked ? "bg-primary text-white" : "bg-white text-gray-200 border-2 border-gray-100"
-                        )}>
-                          <station.icon className="w-6 h-6" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className={cn("font-black uppercase tracking-widest text-xs", isUnlocked ? "text-secondary" : "text-gray-300")}>
-                            {station.label} ({station.day})
-                          </h4>
-                          <p className="text-[10px] font-bold text-secondary/40">
-                            {status === 'completed' ? "Atividade Concluída" :
-                             status === 'available' ? "Disponível para o Aluno" :
-                             status === 'scheduled' ? `Agendado: ${new Date(loopConfig[`${station.id}_agendamento`]).toLocaleString()}` :
-                             "Aguardando Liberação"}
-                          </p>
-                        </div>
-                        {status === 'completed' && <CheckCircle2 className="w-5 h-5 text-success" />}
-                        {status === 'scheduled' && <Clock className="w-4 h-4 text-primary/40" />}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Feedback Reports & Activity Timeline */}
-              <div className="lg:col-span-2 space-y-8">
-                <div className="bg-gray-50 rounded-[40px] p-8 md:p-12">
-                  <div className="flex items-center gap-4 mb-8">
-                    <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
-                      <MessageSquare className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-black text-secondary tracking-tight">Relatórios do Tutor</h3>
-                      <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Feedback pedagógico qualitativo</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    {childFeedback.map((fb) => (
-                      <div key={fb.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] font-black text-primary uppercase tracking-widest">
-                            {new Date(fb.created_at).toLocaleDateString('pt-BR')}
-                          </span>
-                          <Quote className="w-4 h-4 text-primary/20" />
-                        </div>
-                        <p className="text-sm text-secondary/70 font-medium leading-relaxed italic">"{fb.conteudo}"</p>
-                        <div className="pt-4 border-t border-gray-50">
-                          <p className="text-[10px] font-black text-secondary/40 uppercase tracking-widest mb-2">Orientação para você:</p>
-                          <p className="text-xs text-secondary/60 font-bold">{fb.orientacao_familia}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {childFeedback.length === 0 && (
-                      <div className="text-center py-10">
-                        <p className="text-secondary/40 font-bold uppercase tracking-widest text-xs">Nenhum feedback ainda</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Activity Timeline with specific feedbacks */}
-                <div className="bg-white rounded-[40px] p-8 md:p-12 border border-gray-100 shadow-sm">
-                  <div className="flex items-center gap-4 mb-8">
-                    <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
-                      <History className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-black text-secondary tracking-tight">Linha do Tempo</h3>
-                      <p className="text-xs text-secondary/40 font-bold uppercase tracking-widest">Atividades e feedbacks específicos</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    {childExecutions
-                      .sort((a, b) => new Date(b.data_conclusao).getTime() - new Date(a.data_conclusao).getTime())
-                      .slice(0, 5)
-                      .map((ex) => (
-                      <div key={ex.id} className="flex gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-all border border-transparent hover:border-gray-100">
-                        <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
-                          {ex.tipo_atividade === 'historia' && <BookOpen className="w-5 h-5 text-blue-500" />}
-                          {ex.tipo_atividade === 'jogo' && <Gamepad2 className="w-5 h-5 text-purple-500" />}
-                          {ex.tipo_atividade === 'tarefa' && <FileText className="w-5 h-5 text-orange-500" />}
-                          {ex.tipo_atividade === 'revisao' && <RefreshCw className="w-5 h-5 text-green-500" />}
-                          {ex.tipo_atividade === 'missao' && <Package className="w-5 h-5 text-primary" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-start">
-                            <h5 className="font-black text-secondary text-sm truncate uppercase tracking-tight">
-                              {ex.missao_titulo_snapshot || ex.tipo_atividade}
-                            </h5>
-                            <span className="text-[10px] font-bold text-secondary/30 whitespace-nowrap">
-                              {new Date(ex.data_conclusao).toLocaleDateString('pt-BR')}
-                            </span>
-                          </div>
-                          {ex.feedback_tutor && (
-                            <div className="mt-2 p-3 bg-primary/5 rounded-xl border border-primary/10">
-                              <p className="text-xs text-primary font-bold leading-relaxed">
-                                <span className="uppercase text-[8px] tracking-widest opacity-60 block mb-1">Feedback do Tutor:</span>
-                                {ex.feedback_tutor}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {childExecutions.length === 0 && (
-                      <div className="text-center py-10">
-                        <p className="text-secondary/40 font-bold uppercase tracking-widest text-xs">Nenhuma atividade registrada</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Mission Center & Reflection */}
-              <div className="space-y-8">
-                {/* Friday Mission Card */}
-                <div className="bg-primary text-white rounded-[40px] p-8 shadow-xl shadow-primary/20 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-8 opacity-10">
-                    <Package className="w-32 h-32" />
-                  </div>
-                  <h4 className="text-xs font-black uppercase tracking-widest mb-4 opacity-80">Missão de Sexta-feira</h4>
-                  <h3 className="text-2xl font-black mb-6 leading-tight">Mão na Massa!</h3>
-                  <p className="text-white/80 font-medium mb-8">
-                    As missões culturais são enviadas pelo tutor para serem realizadas em família. Verifique se há uma nova missão desbloqueada!
-                  </p>
-                  
-                  {loopConfig?.missao_sexta_desbloqueada ? (
-                    <div className={cn(
-                      "p-6 rounded-3xl border space-y-4 transition-all",
-                      getStationStatus('missao') === 'completed' 
-                        ? "bg-white/20 border-white/40" 
-                        : "bg-white/10 border-white/20"
-                    )}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className={cn("w-4 h-4", getStationStatus('missao') === 'completed' ? "text-white" : "text-yellow-300")} />
-                          <p className="text-sm font-black">
-                            {getStationStatus('missao') === 'completed' 
-                              ? '✅ Missão Concluída!' 
-                              : `✨ Missão Ativa: ${loopConfig.missao_titulo || loopConfig.missao?.titulo || 'Mão na Massa!'}`}
-                          </p>
-                        </div>
-                        {getStationStatus('missao') === 'completed' && (
-                          <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-lg">
-                            Sucesso
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm font-medium opacity-90 leading-relaxed bg-white/5 p-4 rounded-2xl border border-white/10">
-                        {getStationStatus('missao') === 'completed' 
-                          ? (childExecutions.find(ex => ex.tipo_atividade === 'missao' && ex.semana_inicio === (loopConfig.semana_inicio || loopConfig.semana_referencia))?.missao_titulo_snapshot || loopConfig.missao_prompt || 'Missão realizada com sucesso!')
-                          : (loopConfig.missao_prompt || loopConfig.missao?.descricao || 'Realize a atividade cultural proposta e envie sua reflexão abaixo.')}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="bg-black/10 p-6 rounded-3xl border border-white/5 flex items-center gap-3">
-                      <Lock className="w-5 h-5 opacity-40" />
-                      <p className="text-xs font-bold opacity-40 uppercase tracking-widest">Aguardando desbloqueio</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Reflection Form */}
-                <div className="bg-white rounded-[40px] p-8 border border-gray-100 shadow-sm space-y-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-success/10 rounded-xl flex items-center justify-center">
-                      <Sparkles className="w-5 h-5 text-success" />
-                    </div>
-                    <h4 className="font-black uppercase tracking-widest text-xs text-secondary">Reflexão do Responsável</h4>
-                  </div>
-                  
-                  <form onSubmit={handleSaveReflection} className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-2">Nível de Engajamento (1-5)</label>
-                      <div className="flex gap-2">
-                        {[1, 2, 3, 4, 5].map((n) => (
-                          <button
-                            key={n}
-                            type="button"
-                            onClick={() => setReflection({ ...reflection, engajamento: n })}
-                            className={cn(
-                              "flex-1 py-2 rounded-xl font-black text-xs transition-all",
-                              reflection.engajamento === n ? "bg-success text-white" : "bg-gray-50 text-secondary/20"
-                            )}
-                          >
-                            {n}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-secondary/40 uppercase tracking-widest ml-2">Comentário Breve</label>
-                      <textarea 
-                        value={reflection.comentario}
-                        onChange={(e) => setReflection({ ...reflection, comentario: e.target.value })}
-                        className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-success/20 transition-all font-medium text-sm h-24"
-                        placeholder="Como foi a experiência?"
-                      />
-                    </div>
-                    <button 
-                      type="submit"
-                      disabled={isSubmittingReflection || !loopConfig?.missao_sexta_desbloqueada}
-                      className="w-full py-4 bg-success text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-success/20 hover:scale-[1.02] transition-all disabled:opacity-50"
-                    >
-                      {isSubmittingReflection ? 'Enviando...' : 'Enviar Reflexão'}
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </div>
+              <ParentDashboardView 
+                profiles={profiles}
+                activeChildId={activeChildId}
+                setActiveChildId={setActiveChildId}
+                childMetrics={childMetrics}
+                loopConfig={loopConfig}
+                getStationStatus={getStationStatus}
+                childFeedback={childFeedback}
+                childExecutions={childExecutions}
+                reflection={reflection}
+                setReflection={setReflection}
+                handleSaveReflection={handleSaveReflection}
+                isSubmittingReflection={isSubmittingReflection}
+              />
             ) : (
               <div className="max-w-7xl mx-auto">
                 <div className="bg-gray-50 rounded-[40px] p-8 md:p-12">
@@ -5647,104 +5795,11 @@ const AlunosPaisPage = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-6">
-                    {loadingOrders ? (
-                      <div className="flex justify-center py-20">
-                        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                      </div>
-                    ) : orders.length === 0 ? (
-                      <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
-                        <Package className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                        <p className="text-secondary/40 font-bold">Você ainda não realizou nenhum pedido.</p>
-                        <button 
-                          onClick={() => navigate('/loja')}
-                          className="mt-4 text-primary font-black uppercase tracking-widest text-xs hover:underline"
-                        >
-                          Visitar a Loja Phaleduc
-                        </button>
-                      </div>
-                    ) : (
-                      orders.map((order) => (
-                        <div key={order.id} className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm hover:shadow-md transition-all">
-                          <div className="flex flex-col lg:flex-row justify-between gap-8">
-                            <div className="space-y-4">
-                              <div className="flex items-center gap-3">
-                                <span className={cn(
-                                  "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest",
-                                  order.status === 'pago' ? "bg-success/10 text-success" :
-                                  order.status === 'Processing' ? "bg-primary/10 text-primary" :
-                                  order.status === 'Shipped' ? "bg-indigo-50 text-indigo-600" :
-                                  order.status === 'Delivered' ? "bg-emerald-50 text-emerald-600" :
-                                  "bg-gray-100 text-gray-500"
-                                )}>
-                                  {order.status === 'pago' ? 'Confirmado' : 
-                                   order.status === 'Processing' ? 'Processando' :
-                                   order.status === 'Shipped' ? 'Enviado' :
-                                   order.status === 'Delivered' ? 'Entregue' : order.status}
-                                </span>
-                                <span className="text-[10px] font-black text-secondary/20 uppercase tracking-widest">
-                                  #{order.id.slice(0, 8).toUpperCase()}
-                                </span>
-                              </div>
-                              <h4 className="text-xl font-black text-secondary">
-                                Pedido de {new Date(order.created_at).toLocaleDateString('pt-BR')}
-                              </h4>
-                              <div className="flex flex-wrap gap-4">
-                                <div className="flex items-center gap-2 text-xs font-bold text-secondary/60">
-                                  <Package className="w-4 h-4" />
-                                  {order.items?.length || 0} Itens
-                                </div>
-                                <div className="flex items-center gap-2 text-xs font-bold text-secondary/60">
-                                  <CreditCard className="w-4 h-4" />
-                                  US$ {(order.total_amount_cents / 100).toFixed(2)}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-4">
-                              {order.tracking_number && (
-                                <a 
-                                  href={`https://www.17track.net/en/track?nums=${order.tracking_number}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-2 px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all"
-                                >
-                                  <Truck className="w-4 h-4" /> Rastrear Pedido
-                                </a>
-                              )}
-                              <button 
-                                onClick={() => handleDownloadInvoice(order)}
-                                className="flex items-center gap-2 px-6 py-3 bg-gray-50 text-secondary rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-gray-100 transition-all"
-                              >
-                                <FileText className="w-4 h-4" /> Download Invoice
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="mt-8 pt-8 border-t border-gray-50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {order.items?.map((item: any, idx: number) => (
-                              <div key={idx} className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center text-secondary/40 font-black text-xs">
-                                  {item.quantity}x
-                                </div>
-                                <div>
-                                  <p className="text-sm font-black text-secondary truncate max-w-[150px]">
-                                    {item.name}
-                                    {item.variant_name && (
-                                      <span className="text-primary ml-1">({item.variant_name})</span>
-                                    )}
-                                  </p>
-                                  <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">
-                                    {item.sku ? `SKU: ${item.sku}` : (item.type === 'fisico' ? 'Produto Físico' : 'Assinatura')}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  <OrdersView 
+                    orders={orders}
+                    loadingOrders={loadingOrders}
+                    onDownloadInvoice={handleDownloadInvoice}
+                  />
                 </div>
               </div>
             )}
@@ -6080,11 +6135,7 @@ const TutoresPage = () => {
     setIsSavingLoop(true);
 
     try {
-      const now = new Date();
-      const day = now.getDay();
-      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(now.setDate(diff));
-      const mondayStr = monday.toISOString().split('T')[0];
+      const mondayStr = getMonday(new Date());
 
       const payload = {
         turma_id: selectedStudent ? null : (selectedTurma?.id || null),
@@ -6102,8 +6153,10 @@ const TutoresPage = () => {
         revisao_agendamento: updatedLoop.revisao_agendamento || null,
         missao_id: updatedLoop.missao?.id || null,
         missao_agendamento: updatedLoop.missao_agendamento || null,
-        liberacao_manual: updatedLoop.liberadoAgora
+        liberacao_manual: updatedLoop.liberacao_manual || updatedLoop.liberadoAgora || false
       };
+
+      console.log('DEBUG: Saving weekly loop with payload:', payload);
 
       const conflictColumns = selectedStudent ? 'aluno_id,semana_referencia' : 'turma_id,semana_referencia';
       const { error: loopError } = await supabase
