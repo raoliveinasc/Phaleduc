@@ -842,9 +842,11 @@ export const AdminLoja = () => {
                         <span className={cn(
                           "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
                           order.status === 'pago' ? "bg-success/10 text-success" :
+                          order.status === 'enviado' ? "bg-blue-500/10 text-blue-600" :
+                          order.status === 'entregue' ? "bg-emerald-500/10 text-emerald-600" :
                           order.status === 'pendente' ? "bg-amber-500/10 text-amber-600" :
                           order.status === 'cancelado' ? "bg-rose-500/10 text-rose-600" :
-                          "bg-blue-500/10 text-blue-600"
+                          "bg-gray-500/10 text-gray-600"
                         )}>
                           {order.status}
                         </span>
