@@ -89,6 +89,14 @@ DROP POLICY IF EXISTS "Pais see own record" ON pais;
 CREATE POLICY "Pais see own record" ON pais 
 FOR SELECT USING (auth.uid() = id AND deleted_at IS NULL);
 
+-- Allow select by email for migration (Crucial for ID migration logic)
+DROP POLICY IF EXISTS "Allow select by email for migration" ON pais;
+CREATE POLICY "Allow select by email for migration" ON pais 
+FOR SELECT USING (
+    auth.uid() = id OR 
+    (auth.role() = 'authenticated' AND email = auth.jwt()->>'email')
+);
+
 -- ALUNOS
 DROP POLICY IF EXISTS "Pais see own children" ON alunos;
 CREATE POLICY "Pais see own children" ON alunos 
@@ -115,3 +123,26 @@ FOR SELECT USING (
         WHERE alunos.id = aluno_assets.aluno_id AND (alunos.parent_id = auth.uid() OR alunos.user_id = auth.uid())
     )
 );
+
+-- 4. Performance & Integrity Improvements
+CREATE INDEX IF NOT EXISTS idx_store_orders_customer_email ON store_orders(customer_email);
+CREATE INDEX IF NOT EXISTS idx_store_orders_parent_id ON store_orders(parent_id);
+
+-- Ensure foreign keys have ON UPDATE CASCADE for seamless ID migration
+ALTER TABLE alunos 
+  DROP CONSTRAINT IF EXISTS alunos_parent_id_fkey,
+  ADD CONSTRAINT alunos_parent_id_fkey 
+  FOREIGN KEY (parent_id) REFERENCES pais(id) 
+  ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE store_orders 
+  DROP CONSTRAINT IF EXISTS store_orders_parent_id_fkey,
+  ADD CONSTRAINT store_orders_parent_id_fkey 
+  FOREIGN KEY (parent_id) REFERENCES pais(id) 
+  ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE subscriptions 
+  DROP CONSTRAINT IF EXISTS subscriptions_user_id_fkey,
+  ADD CONSTRAINT subscriptions_user_id_fkey 
+  FOREIGN KEY (user_id) REFERENCES pais(id) 
+  ON DELETE CASCADE ON UPDATE CASCADE;

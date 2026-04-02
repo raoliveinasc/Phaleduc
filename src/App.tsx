@@ -3862,22 +3862,31 @@ const OrdersView = ({
                 <div className="flex items-center gap-3 mb-1">
                   <h4 className="text-xl font-black text-secondary">Pedido #{order.id.slice(0, 8).toUpperCase()}</h4>
                   <span className={cn(
-                    "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
-                    order.status === 'paid' ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"
+                    "px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest",
+                    order.status === 'pago' ? "bg-success/10 text-success" :
+                    order.status === 'Processing' ? "bg-primary/10 text-primary" :
+                    order.status === 'Shipped' ? "bg-indigo-50 text-indigo-600" :
+                    order.status === 'Delivered' ? "bg-emerald-50 text-emerald-600" :
+                    "bg-gray-100 text-gray-500"
                   )}>
-                    {order.status === 'paid' ? 'Pago' : 'Pendente'}
+                    {order.status === 'pago' ? 'Confirmado' : 
+                     order.status === 'Processing' ? 'Processando' :
+                     order.status === 'Shipped' ? 'Enviado' :
+                     order.status === 'Delivered' ? 'Entregue' : order.status}
                   </span>
                 </div>
                 <p className="text-sm text-secondary/40 font-medium mb-4">
                   Realizado em {new Date(order.created_at).toLocaleDateString('pt-BR')}
                 </p>
                 <div className="flex flex-wrap gap-4">
-                  {order.items?.map((item: any, idx: number) => (
-                    <div key={idx} className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
-                      <span className="text-xs font-bold text-secondary">{item.name}</span>
-                      <span className="text-[10px] font-black text-secondary/40">x{item.quantity}</span>
-                    </div>
-                  ))}
+                  <div className="flex items-center gap-2 text-xs font-bold text-secondary/60">
+                    <Package className="w-4 h-4" />
+                    {order.items?.length || 0} Itens
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-secondary/60">
+                    <CreditCard className="w-4 h-4" />
+                    US$ {(order.total_amount_cents / 100).toFixed(2)}
+                  </div>
                 </div>
               </div>
             </div>
@@ -3885,13 +3894,13 @@ const OrdersView = ({
               <div className="text-right">
                 <p className="text-[10px] font-black text-secondary/40 uppercase tracking-widest mb-1">Total do Pedido</p>
                 <p className="text-3xl font-black text-secondary">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total_amount)}
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(order.total_amount_cents / 100)}
                 </p>
               </div>
               <div className="flex gap-3">
-                {order.tracking_url && (
+                {order.tracking_number && (
                   <a 
-                    href={order.tracking_url} 
+                    href={`https://www.17track.net/en/track?nums=${order.tracking_number}`}
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 px-4 py-2 bg-secondary text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all"
@@ -3907,6 +3916,27 @@ const OrdersView = ({
                 </button>
               </div>
             </div>
+          </div>
+
+          <div className="mt-8 pt-8 border-t border-gray-50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {order.items?.map((item: any, idx: number) => (
+              <div key={idx} className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center text-secondary/40 font-black text-xs">
+                  {item.quantity}x
+                </div>
+                <div>
+                  <p className="text-sm font-black text-secondary truncate max-w-[150px]">
+                    {item.name}
+                    {item.variant_name && (
+                      <span className="text-primary ml-1">({item.variant_name})</span>
+                    )}
+                  </p>
+                  <p className="text-[10px] font-bold text-secondary/40 uppercase tracking-widest">
+                    {item.sku ? `SKU: ${item.sku}` : (item.type === 'fisico' ? 'Produto Físico' : 'Assinatura')}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       ))}
@@ -4319,6 +4349,7 @@ const AlunosPaisPage = () => {
   const fetchOrders = async (userId: string) => {
     setLoadingOrders(true);
     try {
+      // 1. Tentar buscar por parent_id (ID do usuário logado)
       const { data, error } = await supabase
         .from('store_orders')
         .select('*')
@@ -4326,7 +4357,38 @@ const AlunosPaisPage = () => {
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      setOrders(data || []);
+      
+      if (data && data.length > 0) {
+        setOrders(data);
+      } else {
+        // 2. Fallback: buscar por e-mail se não houver por ID
+        // Isso ajuda se o usuário comprou antes de ter uma conta ou se o ID não foi migrado corretamente
+        const { data: userData } = await supabase.auth.getUser();
+        const userEmail = userData.user?.email;
+        
+        if (userEmail) {
+          const { data: emailData, error: emailError } = await supabase
+            .from('store_orders')
+            .select('*')
+            .eq('customer_email', userEmail)
+            .order('created_at', { ascending: false });
+          
+          if (!emailError && emailData && emailData.length > 0) {
+            setOrders(emailData);
+            
+            // Opcional: Vincular esses pedidos ao ID atual para futuras consultas
+            await supabase
+              .from('store_orders')
+              .update({ parent_id: userId })
+              .eq('customer_email', userEmail)
+              .is('parent_id', null);
+          } else {
+            setOrders([]);
+          }
+        } else {
+          setOrders([]);
+        }
+      }
     } catch (err) {
       console.error('Error fetching orders:', err);
     } finally {
@@ -4434,6 +4496,8 @@ const AlunosPaisPage = () => {
 
         if (existingByEmail) {
           console.log("Registro encontrado por e-mail. Migrando ID de", existingByEmail.id, "para", userId);
+          
+          // 1. Migrar o registro principal em 'pais'
           const { data: updatedFamily, error: updateError } = await supabase
             .from('pais')
             .update({
@@ -4447,9 +4511,33 @@ const AlunosPaisPage = () => {
           
           if (updateError) {
             console.error("Erro ao migrar ID do responsável:", updateError);
-            family = existingByEmail; // Fallback para o registro antigo se falhar o update (improvável)
+            family = existingByEmail;
           } else {
             family = updatedFamily;
+            
+            // 2. Migrar dados relacionados (Garantia adicional além do CASCADE)
+            const oldId = existingByEmail.id;
+            if (oldId !== userId) {
+              console.log("Migrando dados relacionados de", oldId, "para", userId);
+              try {
+                const migrationResults = await Promise.allSettled([
+                  supabase.from('alunos').update({ parent_id: userId }).eq('parent_id', oldId),
+                  supabase.from('subscriptions').update({ user_id: userId }).eq('user_id', oldId),
+                  supabase.from('reflexoes_familia').update({ familia_id: userId }).eq('familia_id', oldId),
+                  supabase.from('store_orders').update({ parent_id: userId }).eq('parent_id', oldId)
+                ]);
+                
+                migrationResults.forEach((result, idx) => {
+                  if (result.status === 'rejected') {
+                    console.error(`Falha na migração da tabela ${idx}:`, result.reason);
+                  }
+                });
+                
+                console.log("Migração de dados relacionados concluída.");
+              } catch (migErr) {
+                console.error("Erro crítico durante migração de dados:", migErr);
+              }
+            }
           }
         } else {
           console.log("Nenhum registro encontrado por e-mail. Criando novo...");
