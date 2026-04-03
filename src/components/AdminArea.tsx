@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import { AdminLoja } from './AdminLoja';
 import { AdminAssinaturas } from './AdminAssinaturas';
+import { AgendaManager } from './AgendaManager';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
 import { clsx, type ClassValue } from 'clsx';
@@ -76,6 +77,7 @@ const AdminSidebar = () => {
     { name: 'Pais', path: '/admin/pais', icon: Users },
     { name: 'Alunos', path: '/admin/alunos', icon: Backpack },
     { name: 'Tutores', path: '/admin/tutores', icon: GraduationCap },
+    { name: 'Agenda', path: '/admin/agenda', icon: Calendar },
     { name: 'Loja', path: '/admin/loja', icon: ShoppingBag },
     { name: 'Assinaturas', path: '/admin/assinaturas', icon: CreditCard },
   ];
@@ -1636,6 +1638,7 @@ export const AdminArea = () => {
             } />
             <Route path="/loja" element={<AdminLoja />} />
             <Route path="/assinaturas" element={<AdminAssinaturas />} />
+            <Route path="/agenda" element={<AgendaManager mode="admin" />} />
           </Routes>
         </AnimatePresence>
       </main>

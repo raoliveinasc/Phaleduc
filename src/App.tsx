@@ -108,6 +108,7 @@ import { twMerge } from 'tailwind-merge';
 import { Toaster, toast } from 'sonner';
 
 import { AdminArea } from './components/AdminArea';
+import { AgendaManager } from './components/AgendaManager';
 import { StudentParentRegistration, TutorRegistration } from './components/RegistrationForms';
 
 // --- Utility ---
@@ -4341,7 +4342,7 @@ const AlunosPaisPage = () => {
   const [loginMode, setLoginMode] = useState<'parent' | 'student'>('parent');
   const [subscription, setSubscription] = useState<any>(null);
   const [checkingSubscription, setCheckingSubscription] = useState(false);
-  const [activeParentTab, setActiveParentTab] = useState<'dashboard' | 'orders'>('dashboard');
+  const [activeParentTab, setActiveParentTab] = useState<'dashboard' | 'orders' | 'agenda'>('dashboard');
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [childExecutions, setChildExecutions] = useState<any[]>([]);
@@ -5771,6 +5772,15 @@ const AlunosPaisPage = () => {
                     Meus Pedidos
                   </button>
                   <button 
+                    onClick={() => setActiveParentTab('agenda')}
+                    className={cn(
+                      "text-xs font-black uppercase tracking-widest transition-all pb-2 border-b-2",
+                      activeParentTab === 'agenda' ? "text-primary border-primary" : "text-secondary/40 border-transparent hover:text-secondary"
+                    )}
+                  >
+                    Agenda
+                  </button>
+                  <button 
                     onClick={() => setShowPasswordChange(!showPasswordChange)}
                     className="flex items-center gap-2 text-[10px] font-black text-secondary/40 hover:text-primary transition-all uppercase tracking-widest pb-2"
                   >
@@ -5870,7 +5880,7 @@ const AlunosPaisPage = () => {
                 handleSaveReflection={handleSaveReflection}
                 isSubmittingReflection={isSubmittingReflection}
               />
-            ) : (
+            ) : activeParentTab === 'orders' ? (
               <div className="max-w-7xl mx-auto">
                 <div className="bg-gray-50 rounded-[40px] p-8 md:p-12">
                   <div className="flex items-center gap-4 mb-10">
@@ -5889,6 +5899,10 @@ const AlunosPaisPage = () => {
                     onDownloadInvoice={handleDownloadInvoice}
                   />
                 </div>
+              </div>
+            ) : (
+              <div className="max-w-7xl mx-auto">
+                <AgendaManager mode="parent" parentId={user?.id} />
               </div>
             )}
           </motion.div>
@@ -6887,6 +6901,7 @@ const TutoresPage = () => {
         <nav className="flex-1 space-y-2">
           <SidebarItem id="dashboard" icon={LayoutDashboard} label="🏠 Início" />
           <SidebarItem id="alunos" icon={Users} label="👥 Meus Alunos" />
+          <SidebarItem id="agenda" icon={Calendar} label="📅 Minha Agenda" />
           <SidebarItem id="loop" icon={LayoutDashboard} label="🎯 Loop Semanal" />
           <SidebarItem id="trilha" icon={BookOpen} label="🎓 Certificação" />
           <SidebarItem id="mala-rosa" icon={ShoppingBag} label="🎒 Mala Rosa" />
@@ -7705,6 +7720,17 @@ const TutoresPage = () => {
                   </div>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'agenda' && (
+            <motion.div 
+              key="agenda"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+            >
+              <AgendaManager mode="tutor" tutorId={tutorData?.id} />
             </motion.div>
           )}
 
